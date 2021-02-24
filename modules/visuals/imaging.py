@@ -31,3 +31,14 @@ def draw_lines(image, lines, color=(128, 128, 128)):
                  (round(line[2]), round(line[3])),
                  color,
                  thickness=2)
+
+
+# format: np.array([x, y], ...)
+def draw_circles(image, circles, color=(128, 128, 128)):
+
+    for circle in circles:
+        cv2.circle(image,
+                 (round(circle[0]), round(circle[1])),
+                 circle[2],
+                 color,
+                 thickness=1)

@@ -32,7 +32,7 @@ def read_gtm_file(path):
     inliers = np.array(inliers) #.reshape(len(matches)//3, 3)
     #print(inliers)
 
-
+    return key_points_left, key_points_right, matches, inliers
 
 
 # test it pls
