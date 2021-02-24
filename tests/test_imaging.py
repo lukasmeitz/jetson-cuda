@@ -1,5 +1,5 @@
 
-from visuals.imaging import *
+from imaging import *
 
 image = load_image('../data/gtm_data/images/img1.png')
 draw_lines(image, [[0, 0, 300, 300]], color=(255, 0, 0))
