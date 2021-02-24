@@ -17,7 +17,7 @@ def test_gtm():
     # draw match points in first image
     match_points = []
     for kpl in key_points_left:
-        match_points += [kpl[0], kpl[1], 5]
+        match_points += [float(kpl[0]), float(kpl[1]), 5]
 
     draw_circles(image_1, match_points)
 

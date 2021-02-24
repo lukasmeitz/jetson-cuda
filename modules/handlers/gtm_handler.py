@@ -19,7 +19,6 @@ def read_gtm_file(path):
     key_points_right = np.array(key_points_right).reshape(len(key_points_right) // 7, 7)
     print(key_points_right)
 
-
     # read matches
     # query_id, train_id, distance
     matches = lines[8].split(' ')[1:-1]
