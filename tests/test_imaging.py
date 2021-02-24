@@ -1,3 +1,4 @@
+from modules.visuals.imaging import *
 
 def test_imaging():
 
