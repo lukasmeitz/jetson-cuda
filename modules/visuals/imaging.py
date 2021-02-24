@@ -13,7 +13,7 @@ def save_image(image, path):
     cv2.imwrite(path, image)
 
 
-def plot_image(img, blocking=False):
+def plot_image(image, blocking=False):
 
     # draw using cv2 library
     cv2.imshow('image', image)
