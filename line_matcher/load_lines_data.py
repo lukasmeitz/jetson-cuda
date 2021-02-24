@@ -1,8 +1,5 @@
-#import cv2
 import numpy as np
 import scipy.io
-#from skimage.draw import line_aa
-#from src.define_transform import define_transformation
 
 
 # out:  model_linee_pairs, scene_line_pairs
@@ -13,15 +10,15 @@ def load_lines_data():
     scene_line_pairs = []
 
     # read matlab file and convert to numpy array
-    line_pair_data = scipy.io.loadmat('../line_matcher_input/listeModScene.mat')
+    line_pair_data = scipy.io.loadmat('../data/line_matcher_input/listeModScene.mat')
     line_pair_data = line_pair_data['listeModScene']
 
     # read modellines
-    model_lines = scipy.io.loadmat('../line_matcher_input/modellines.mat')
+    model_lines = scipy.io.loadmat('../data/line_matcher_input/modellines.mat')
     model_lines = np.array(model_lines["modellines"][0][:])
 
     # and the scenelines
-    scene_lines = scipy.io.loadmat('../line_matcher_input/scenelines.mat')
+    scene_lines = scipy.io.loadmat('../data/line_matcher_input/scenelines.mat')
     scene_lines = np.array(scene_lines["scenelines"][0][:])
 
 

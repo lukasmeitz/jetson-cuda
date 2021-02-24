@@ -1,14 +1,13 @@
-import time
 
 import cv2
 import numpy as np
 import scipy
 import matplotlib.pyplot as plt
-import math
-import sys
 
 from load_lines_data import load_lines_data
 from define_transform import define_transformation, transform_modelline_batch
+from .load_lines_data import load_lines_data
+from .define_transform import define_transformation, transform_modelline_batch
 
 
 def ransac_plot(n, x, y, m, c, final=False, x_in=(), y_in=(), points=()):
