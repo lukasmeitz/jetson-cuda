@@ -33,7 +33,3 @@ def read_gtm_file(path):
     #print(inliers)
 
     return key_points_left, key_points_right, matches, inliers
-
-
-# test it pls
-read_gtm_file('../../data/gtm_data/SIFT/img1_img2_inlRat1000SIFT.gtm')

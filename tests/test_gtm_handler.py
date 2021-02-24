@@ -8,6 +8,7 @@ def test_gtm():
     key_points_left, key_points_right, matches, inliers = read_gtm_file('/home/lukas/jetson-cuda/data/gtm_data/SIFT/img1_img2_inlRat1000SIFT.gtm')
     print(matches)
 
+
     # read the corresponding images
     image_1 = load_image('/home/lukas/jetson-cuda/data/gtm_data/images/img1.png')
     image_2 = load_image('/home/lukas/jetson-cuda/data/gtm_data/images/img2.png')
