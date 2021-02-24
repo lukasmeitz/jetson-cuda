@@ -36,4 +36,4 @@ def read_gtm_file(path):
 
 
 # test it pls
-read_gtm_file('../data/gtm_data/SIFT/img1_img2_inlRat1000SIFT.gtm')
+read_gtm_file('../../data/gtm_data/SIFT/img1_img2_inlRat1000SIFT.gtm')
