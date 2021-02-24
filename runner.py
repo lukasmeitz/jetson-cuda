@@ -10,7 +10,7 @@ if __name__ == "__main__":
 
 
     if platform == "linux" or platform == "linux2":
-        path = "home/lukas/jetson-cuda/data/"
+        path = "/home/lukas/jetson-cuda/data/"
     else:
         path = "data/"
 
