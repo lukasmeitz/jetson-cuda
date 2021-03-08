@@ -17,6 +17,7 @@ center_point = [360, 640]
 model_lines, scene_lines = load_lines_data()
 current_best_inliers = 0
 
+
 # perform RANSAC iterations
 for it in range(ransac_iterations):
 

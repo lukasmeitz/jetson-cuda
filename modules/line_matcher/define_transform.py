@@ -1,6 +1,85 @@
 import numpy as np
 
 
+# in: line1 = [p1x, p1y, p2x, p2y, id]
+# in: line2 = [p1x, p1y, p2x, p2y, id]
+def calc_min_pair_distance(ml1, ml2, sl1, sl2):
+
+    error = 999
+
+    # distance of all points to one another
+    dist_11 = calc_min_line_distance(ml1, sl1)
+    dist_12 = calc_min_line_distance(ml1, sl2)
+
+    if dist_11 < dist_12:
+        dist_2 = calc_min_line_distance(ml2, sl2)
+        error = np.sqrt((dist_11 ** 2) + (dist_2 ** 2))
+    else:
+        dist_2 = calc_min_line_distance(ml2, sl1)
+        error = np.sqrt((dist_11 ** 2) + (dist_2 ** 2))
+
+    return error
+
+
+def calc_min_line_distance(line1, line2):
+
+    error = 999
+
+    # line1 point 1 to line2 distance
+    dist_11 = calc_distance(line1[0:2], line2[0:2])
+    dist_12 = calc_distance(line1[0:2], line2[2:4])
+
+    # if l1p1 to l2p1 is closest
+    if dist_11 < dist_12:
+        dist_2 = calc_distance(line1[2:4], line2[2:4])
+        error = np.sqrt((dist_11 ** 2) + (dist_2 ** 2))
+    else:
+        dist_2 = calc_distance(line1[2:4], line2[0:2])
+        error = np.sqrt((dist_12 ** 2) + (dist_2 ** 2))
+
+    return error
+
+
+
+# in: line1 = [p1x, p1y, p2x, p2y, id]
+# in: line2 = [p1x, p1y, p2x, p2y, id]
+def calc_line_distance(ml1, ml2, sl1, sl2):
+
+    dist_m1s1 = np.sqrt(
+        calc_distance(ml1[0:2], sl1[0:2]) ** 2
+        + calc_distance(ml1[2:4], sl1[2:4]) ** 2
+    )
+
+    dist_m1s2 = np.sqrt(
+        calc_distance(ml1[0:2], sl2[0:2]) ** 2
+        + calc_distance(ml1[2:4], sl2[2:4]) ** 2
+    )
+
+    dist_m2s1 = np.sqrt(
+        calc_distance(ml2[0:2], sl1[0:2]) ** 2
+        + calc_distance(ml2[2:4], sl1[2:4]) ** 2
+    )
+
+    dist_m2s2 = np.sqrt(
+        calc_distance(ml2[0:2], sl2[0:2]) ** 2
+        + calc_distance(ml2[2:4], sl2[2:4]) ** 2
+    )
+
+    return np.mean([dist_m1s1, dist_m1s2, dist_m2s1, dist_m2s2])
+
+
+# distance between two points
+# in:   a = [x, y]
+# in:   b = [x, y]
+def calc_distance(a, b):
+
+    x_dist = b[0] - a[0]
+    y_dist = b[1] - a[1]
+    dist = np.sqrt(x_dist ** 2 + y_dist ** 2)
+
+    return dist
+
+# angle between two vectors
 # in:   a = [x, y]
 # in:   b = [x, y]
 def calc_angle(a, b):
@@ -46,6 +125,32 @@ def get_rotation_matrix_2d(rotation_angle):
     return r
 
 
+def transform_line_batch(lines, rotation_angle, transformation_distance, center_point):
+
+    # return variables
+    lines_transformed = []
+
+    # rotation matrix
+    r = get_rotation_matrix_2d(rotation_angle)
+
+    for i in range(len(lines)):
+
+        # correction of modelline 1
+        m1_p1 = lines[i][0:2]
+        m1_p2 = lines[i][2:4]
+        m1_p1_corrected = r.dot([m1_p1[0] - center_point[0], m1_p1[1] - center_point[1]]) + center_point
+        m1_p2_corrected = r.dot([m1_p2[0] - center_point[0], m1_p2[1] - center_point[1]]) + center_point
+        m1 = [m1_p1_corrected[0] + transformation_distance[0],
+              m1_p1_corrected[1] + transformation_distance[1],
+              m1_p2_corrected[0] + transformation_distance[0],
+              m1_p2_corrected[1] + transformation_distance[1],
+              lines[i][4]]
+
+        lines_transformed += [m1]
+
+    return lines_transformed
+
+
 # in:   model_pairs = [modellines1, modellines2]
 #       rotation_angle = angle in degrees
 #       transformation distance = [distance_x, distance_y]
@@ -68,7 +173,8 @@ def transform_modelline_batch(model_pairs, rotation_angle, transformation_distan
         m1 = [m1_p1_corrected[0] + transformation_distance[0],
               m1_p1_corrected[1] + transformation_distance[1],
               m1_p2_corrected[0] + transformation_distance[0],
-              m1_p2_corrected[1] + transformation_distance[1]]
+              m1_p2_corrected[1] + transformation_distance[1],
+              model_pairs[i][0][4]]
 
         # correction of modelline 2
         m2_p1 = model_pairs[i][1][0:2]
@@ -78,7 +184,8 @@ def transform_modelline_batch(model_pairs, rotation_angle, transformation_distan
         m2 = [m2_p1_corrected[0] + transformation_distance[0],
               m2_p1_corrected[1] + transformation_distance[1],
               m2_p2_corrected[0] + transformation_distance[0],
-              m2_p2_corrected[1] + transformation_distance[1]]
+              m2_p2_corrected[1] + transformation_distance[1],
+              model_pairs[i][1][4]]
 
         model_pairs_transformed += [[m1, m2]]
 
@@ -107,7 +214,7 @@ def define_transformation(X, CoP):
     sl2 = sl2 / np.linalg.norm(sl2)
     w2 = calc_angle(ml2, sl2)
 
-    w = (w1 + w2) / 2   # i removed a - sign before the calculation because lines were rotated in the wrong direction
+    w = (w1 + w2) / 2 # beware the negative sign! i removed it
 
     # compensate rotation
     r = np.array(((np.cos(np.radians(w)), -np.sin(np.radians(w))),
@@ -150,7 +257,7 @@ def define_transformation(X, CoP):
         scale_center = [(m1[0] + m1[2]) / 2, (m1[1] + m1[3]) / 2]
         scale_factor = 1  # there is no reasonable factor to calculate at this point
 
-    return [w, t[0], t[1], scale_factor, scale_center, m1, m2]
+    return [w, t[0], t[1], scale_factor, scale_center]  # , m1, m2]
 
     '''
     else:

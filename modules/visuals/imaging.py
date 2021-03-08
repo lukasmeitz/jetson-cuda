@@ -13,10 +13,10 @@ def save_image(image, path):
     cv2.imwrite(path, image)
 
 
-def plot_image(image, blocking=False):
+def plot_image(image, text, blocking=False):
 
     # draw using cv2 library
-    cv2.imshow('image', image)
+    cv2.imshow(str(text), image)
 
     if blocking:
         cv2.waitKey()
@@ -42,3 +42,8 @@ def draw_circles(image, circles, color=(128, 128, 128)):
                  circle[2],
                  color,
                  thickness=1)
+
+
+def concat(image1, image2):
+
+    return cv2.hconcat([image1, image2])
