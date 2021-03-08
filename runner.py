@@ -20,7 +20,7 @@ if __name__ == "__main__":
     meta = {}
 
     # select a single line matching test set between 1 and 45
-    meta["test_set_number"] = 24
+    meta["test_set_number"] = 2
 
     # determine platform and configure resource path
     if platform == "linux" or platform == "linux2":
