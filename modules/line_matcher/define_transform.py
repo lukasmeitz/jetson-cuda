@@ -1,5 +1,5 @@
 import numpy as np
-
+from numba import jit
 
 # in: line1 = [p1x, p1y, p2x, p2y, id]
 # in: line2 = [p1x, p1y, p2x, p2y, id]

@@ -3,6 +3,7 @@ import json
 import time
 from sys import platform
 
+from modules.algorithms.randomised_ransac import randomised_ransac
 from modules.algorithms.ransac_draft import ransac_draft
 from modules.handlers import *
 from modules.handlers.load_test_sets import load_test_set
@@ -20,7 +21,8 @@ if __name__ == "__main__":
     meta = {}
 
     # select a single line matching test set between 1 and 45
-    meta["test_set_number"] = 2
+    meta["test_set_number"] = 8
+    meta["ransac_type"] = "randomised"
 
     # determine platform and configure resource path
     if platform == "linux" or platform == "linux2":
@@ -36,8 +38,8 @@ if __name__ == "__main__":
     scene_lines, model_lines, match_id_list = load_test_set(meta["test_set_number"], meta["path"])
     meta["scene_lines"] = len(scene_lines)
     meta["model_lines"] = len(model_lines)
-    meta["match_count_gtm"] = len(match_id_list)
-    meta["match_id_list_gtm"] = match_id_list
+    meta["match_id_list_gtm"] = [int(mid)-1 for mid in match_id_list if mid != 0]
+    meta["match_count_gtm"] = len(meta["match_id_list_gtm"])
 
     # get rid of unnecessary data
     scene_lines = [[p1[0][0], p1[1][0], p2[0][0], p2[1][0], mid] for p1, p2, vec, mid, len, ang in scene_lines]
@@ -49,6 +51,10 @@ if __name__ == "__main__":
     # give ids to lines
     scene_lines = [[line[0], line[1], line[2], line[3], num] for num, line in enumerate(scene_lines)]
     model_lines = [[line[0], line[1], line[2], line[3], num] for num, line in enumerate(model_lines)]
+
+    # shuffle lines
+    np.random.shuffle(scene_lines)
+    np.random.shuffle(model_lines)
 
     '''
     preprocessing
@@ -72,7 +78,12 @@ if __name__ == "__main__":
     start_time = time.time()
 
     # feed this to ransac
-    matching_correspondence, transformation_2d = ransac_draft(model_permutations, scene_permutations)
+
+    if meta["ransac_type"] == "standard":
+        matching_correspondence, transformation_2d = ransac_draft(model_permutations, scene_permutations)
+
+    elif meta["ransac_type"] == "randomised":
+        matching_correspondence, transformation_2d = randomised_ransac(model_permutations, scene_permutations)
 
     # stop time
     meta["duration"] = (time.time() - start_time)
@@ -106,7 +117,8 @@ if __name__ == "__main__":
         if (ml2_id, sl2_id) not in matched_lines:
             matched_lines += [(ml2_id, sl2_id)]
 
-    meta["matches"] = matched_lines
+    meta["match_id_list"] = matched_lines
+    meta["match_count"] = len(matched_lines)
     meta["transformation"] = transformation_2d
 
     print(meta)
@@ -139,4 +151,5 @@ if __name__ == "__main__":
     save_image(blank_image, meta["path"] + "results/matching_testset" + str(meta["test_set_number"]) + ".png")
 
     # show to screen, block for user input
-    plot_image(blank_image, "test set " + str(meta["test_set_number"]), True)
+    if not meta["system"] == "Jetson Board":
+        plot_image(blank_image, "test set " + str(meta["test_set_number"]), True)

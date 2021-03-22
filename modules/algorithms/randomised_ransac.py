@@ -15,7 +15,7 @@ output:     matches         - vector of tuples [(FeatureIndexLeft, FeatureIndexR
 
 '''
 
-def ransac_draft(model_line_pairs, scene_line_pairs):
+def randomised_ransac(model_line_pairs, scene_line_pairs):
 
     # Ransac parameters
     ransac_iterations = 200  # number of iterations
@@ -27,15 +27,13 @@ def ransac_draft(model_line_pairs, scene_line_pairs):
 
     # generate an educated guess on how many iterations
     # probability to choose an inlier from modellines
-    p_inlier_model = 1 #model_line_count
-    p_inlier_scene = 1 / len(scene_line_pairs)
-    p_pick_inlier = p_inlier_model * p_inlier_scene
+    p_pick_inlier = 1 / len(scene_line_pairs)
     print(p_pick_inlier)
 
     # iterations needed
-    p_estimate = p_pick_inlier # ** 2
-    k = np.log(1 - 0.99) / np.log(1 - p_estimate)
-    ransac_iterations = max([int(k) + 1, ransac_iterations])
+    p_estimate = p_pick_inlier ** 2
+    k = np.log(1 - (0.99 * p_pick_inlier)) / np.log(1 - (p_estimate * p_pick_inlier))
+    ransac_iterations = int(k) * 10
 
     print("proposed iterations: " + str(k))
 
@@ -48,13 +46,28 @@ def ransac_draft(model_line_pairs, scene_line_pairs):
     for it in range(ransac_iterations):
 
         # pick a random pair
-        sample_model_line_pair = model_line_pairs[int(random_sample_indices[it][1])]
-        sample_scene_line_pair = scene_line_pairs[int(random_sample_indices[it][0])]
+        sample_model_line_pair = model_line_pairs[int(np.floor(random_sample_indices[it][1]))]
+        sample_scene_line_pair = scene_line_pairs[int(np.floor(random_sample_indices[it][0]))]
 
         # find the transformation for these points
         t = define_transformation([sample_model_line_pair[0], sample_model_line_pair[1],
                                    sample_scene_line_pair[0], sample_scene_line_pair[1]],
                                   center_point)
+
+        # preliminary test
+        preliminary_scene_line_pair_index = int(np.random.rand() * (len(scene_line_pairs) - 1))
+        preliminary_model_line_pair_index = int(np.random.rand() * (len(model_line_pairs) - 1))
+        transformed_sample_line = transform_modelline_batch(
+                                                [model_line_pairs[preliminary_model_line_pair_index]],
+                                                t[0], [t[1], t[2]], center_point)
+        ml1, ml2 = transformed_sample_line[0]
+        sl1, sl2 = scene_line_pairs[preliminary_scene_line_pair_index]
+        error = calc_min_pair_distance(ml1, ml2, sl1, sl2)
+
+        if error > ransac_threshold:
+            continue
+
+        print("tdd error: " + str(error))
 
         # convert all other model lines using this transformation
         model_lines_transformed = transform_modelline_batch(model_line_pairs, t[0], [t[1], t[2]], center_point)

@@ -19,7 +19,7 @@ def load_test_set(n, path):
     model_lines = test_set_data['Results_t']['Modellines_err'][0][:][0][0]
 
     # save the test set meta data
-    match_ids = test_set_data['matchingOutput']['Matches']
+    match_ids = test_set_data['matchingOutput']['Matches'][0][:][0][0]
 
     return scene_lines, model_lines, match_ids
 
