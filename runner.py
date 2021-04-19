@@ -1,8 +1,10 @@
 import itertools
 import json
+import os
 import time
 from sys import platform
 
+from modules.algorithms.adaptive_ransac import adaptive_ransac
 from modules.algorithms.randomised_ransac import randomised_ransac
 from modules.algorithms.ransac_draft import ransac_draft
 from modules.handlers import *
@@ -12,17 +14,18 @@ from modules.visuals.imaging import *
 from tests.test_imaging import *
 from tests.test_gtm_handler import *
 
-if __name__ == "__main__":
+
+
+def do_test_run(set_number, algorithm):
+
+    print("Doing Test #" + str(set_number) + " using " + str(algorithm) + " RANSAC")
 
     '''
     parameters
     '''
+
     # dict to gather test run information
     meta = {}
-
-    # select a single line matching test set between 1 and 45
-    meta["test_set_number"] = 8
-    meta["ransac_type"] = "randomised"
 
     # determine platform and configure resource path
     if platform == "linux" or platform == "linux2":
@@ -32,9 +35,14 @@ if __name__ == "__main__":
         meta["path"] = ""
         meta["system"] = "Windows Desktop"
 
+    # select a single line matching test set between 1 and 45
+    meta["test_set_number"] = set_number
+    meta["ransac_type"] = algorithm
+
     '''
     data loading
     '''
+
     scene_lines, model_lines, match_id_list = load_test_set(meta["test_set_number"], meta["path"])
     meta["scene_lines"] = len(scene_lines)
     meta["model_lines"] = len(model_lines)
@@ -74,19 +82,24 @@ if __name__ == "__main__":
     algorithm
     '''
 
-    # start timer
-    start_time = time.time()
-
     # feed this to ransac
-
     if meta["ransac_type"] == "standard":
+        start_time = time.time()
         matching_correspondence, transformation_2d = ransac_draft(model_permutations, scene_permutations)
+        meta["duration"] = (time.time() - start_time)
 
     elif meta["ransac_type"] == "randomised":
+        start_time = time.time()
         matching_correspondence, transformation_2d = randomised_ransac(model_permutations, scene_permutations)
+        meta["duration"] = (time.time() - start_time)
 
-    # stop time
-    meta["duration"] = (time.time() - start_time)
+    elif meta["ransac_type"] == "adaptive":
+        start_time = time.time()
+        matching_correspondence, transformation_2d = adaptive_ransac(model_permutations, scene_permutations)
+        meta["duration"] = (time.time() - start_time)
+
+
+
 
     '''
     post processing
@@ -121,10 +134,15 @@ if __name__ == "__main__":
     meta["match_count"] = len(matched_lines)
     meta["transformation"] = transformation_2d
 
-    print(meta)
-    with open(meta["path"] + "results/matching_testset" + str(meta["test_set_number"]) + ".json", 'w') as fp:
+    dump_path = "results/" + str(algorithm) + "/Set_" + "{:03d}".format(set_number) + "/"
+    if not os.path.exists(dump_path):
+        os.makedirs(dump_path)
+
+    with open(meta["path"] + dump_path + "matching_result" + str(meta["test_set_number"]) + ".json", 'w') as fp:
         json.dump(meta, fp)
 
+    print("found " + str(meta["match_count"]) + " of " + str(meta["match_count_gtm"]) + " matches")
+    print()
 
     '''
     visualization
@@ -148,8 +166,18 @@ if __name__ == "__main__":
     draw_lines(blank_image, connection_lines, (255, 255, 0))
 
     # write image to disc
-    save_image(blank_image, meta["path"] + "results/matching_testset" + str(meta["test_set_number"]) + ".png")
+    save_image(blank_image, meta["path"] + dump_path + "matching_visuals" + str(meta["test_set_number"]) + ".png")
 
     # show to screen, block for user input
-    if not meta["system"] == "Jetson Board":
-        plot_image(blank_image, "test set " + str(meta["test_set_number"]), True)
+    #if not meta["system"] == "Jetson Board":
+    #    plot_image(blank_image, "test set " + str(meta["test_set_number"]), True)
+
+
+if __name__ == "__main__":
+
+    algorithm_list = [ "standard"] #["standard", "randomised",
+
+    for test_num in range(9, 10, 1):
+
+        for algo in algorithm_list:
+            do_test_run(test_num, algo)

@@ -15,10 +15,10 @@ output:     matches         - vector of tuples [(FeatureIndexLeft, FeatureIndexR
 
 '''
 
-def randomised_ransac(model_line_pairs, scene_line_pairs):
+def mle_ransac(model_line_pairs, scene_line_pairs):
 
     # Ransac parameters
-    ransac_iterations = 200  # number of iterations
+    ransac_iterations = 500  # number of iterations
     ransac_threshold = 15  # threshold
     center_point = [256, 256]
 
@@ -54,20 +54,6 @@ def randomised_ransac(model_line_pairs, scene_line_pairs):
                                    sample_scene_line_pair[0], sample_scene_line_pair[1]],
                                   center_point)
 
-        # preliminary test
-        preliminary_scene_line_pair_index = int(np.random.rand() * (len(scene_line_pairs) - 1))
-        preliminary_model_line_pair_index = int(np.random.rand() * (len(model_line_pairs) - 1))
-        transformed_sample_line = transform_modelline_batch(
-                                                [model_line_pairs[preliminary_model_line_pair_index]],
-                                                t[0], [t[1], t[2]], center_point)
-        ml1, ml2 = transformed_sample_line[0]
-        sl1, sl2 = scene_line_pairs[preliminary_scene_line_pair_index]
-        error = calc_min_pair_distance(ml1, ml2, sl1, sl2)
-
-        if error > ransac_threshold:
-            continue
-
-        print("tdd error: " + str(error))
 
         # convert all other model lines using this transformation
         model_lines_transformed = transform_modelline_batch(model_line_pairs, t[0], [t[1], t[2]], center_point)

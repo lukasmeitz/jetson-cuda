@@ -19,7 +19,7 @@ def ransac_draft(model_line_pairs, scene_line_pairs):
 
     # Ransac parameters
     ransac_iterations = 200  # number of iterations
-    ransac_threshold = 25  # threshold
+    ransac_threshold = 50  # threshold
     center_point = [256, 256]
 
     # ransac base line data
