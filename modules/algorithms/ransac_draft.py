@@ -24,6 +24,8 @@ def ransac_draft(model_line_pairs, scene_line_pairs):
 
     # ransac base line data
     current_best_inliers = 0
+    current_best_inliers_indices = []
+    current_best_transformation = []
 
     # generate an educated guess on how many iterations
     # probability to choose an inlier from modellines

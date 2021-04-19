@@ -39,6 +39,16 @@ def do_test_run(set_number, algorithm):
     meta["test_set_number"] = set_number
     meta["ransac_type"] = algorithm
 
+    # create folder structure
+    dump_path = "results/" + str(algorithm) + "/Set_" + "{:03d}".format(set_number) + "/"
+
+    if not os.path.exists(dump_path):
+        os.makedirs(dump_path)
+    else:
+        print("skipping")
+        return
+
+
     '''
     data loading
     '''
@@ -134,9 +144,6 @@ def do_test_run(set_number, algorithm):
     meta["match_count"] = len(matched_lines)
     meta["transformation"] = transformation_2d
 
-    dump_path = "results/" + str(algorithm) + "/Set_" + "{:03d}".format(set_number) + "/"
-    if not os.path.exists(dump_path):
-        os.makedirs(dump_path)
 
     with open(meta["path"] + dump_path + "matching_result" + str(meta["test_set_number"]) + ".json", 'w') as fp:
         json.dump(meta, fp)
