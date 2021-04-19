@@ -175,9 +175,9 @@ def do_test_run(set_number, algorithm):
 
 if __name__ == "__main__":
 
-    algorithm_list = [ "standard"] #["standard", "randomised",
+    algorithm_list = [ "adaptive", "standard", "randomised" ]
 
-    for test_num in range(9, 10, 1):
+    for test_num in range(1, 30, 1):
 
         for algo in algorithm_list:
             do_test_run(test_num, algo)
