@@ -1,3 +1,4 @@
+import datetime
 import itertools
 import json
 import os
@@ -5,11 +6,13 @@ import time
 from sys import platform
 
 from modules.algorithms.adaptive_ransac import adaptive_ransac
+from modules.algorithms.preprocessing import filter_lines
 from modules.algorithms.randomised_ransac import randomised_ransac
 from modules.algorithms.ransac_draft import ransac_draft
 from modules.handlers import *
 from modules.handlers.load_test_sets import load_test_set
-from modules.line_matcher.define_transform import transform_modelline_batch, transform_line_batch
+from modules.optimized.optimized_math import transform_line_batch
+from modules.optimized.optimized_ransac import optimized_ransac
 from modules.visuals.imaging import *
 from tests.test_imaging import *
 from tests.test_gtm_handler import *
@@ -40,7 +43,7 @@ def do_test_run(set_number, algorithm):
     meta["ransac_type"] = algorithm
 
     # create folder structure
-    dump_path = "results/" + str(algorithm) + "/Set_" + "{:03d}".format(set_number) + "/"
+    dump_path = "results/" + str(algorithm) + "/Set_" + "{:03d}".format(set_number) + "/" + str(datetime.datetime.now().strftime("%Y%m%d%H%M%S")) + "/"
 
     if not os.path.exists(dump_path):
         os.makedirs(dump_path)
@@ -48,6 +51,8 @@ def do_test_run(set_number, algorithm):
         print("skipping")
         return
 
+    seed = 2021
+    rng = np.random.default_rng(seed)
 
     '''
     data loading
@@ -74,12 +79,23 @@ def do_test_run(set_number, algorithm):
     np.random.shuffle(scene_lines)
     np.random.shuffle(model_lines)
 
+    # create numpy array
+    scene_lines = np.array(scene_lines)
+    model_lines = np.array(model_lines)
+
+
+
     '''
     preprocessing
     '''
 
     # transformation onto the scenelines
-    scene_lines = transform_line_batch(scene_lines, 0.0, [0, 0], [256, 256])
+    scene_lines = transform_line_batch(scene_lines, 0.0, np.array([0, 0]), np.array([256, 256]))
+
+    # start preprocessing logic
+    scene_lines = filter_lines(scene_lines)
+
+
 
     # create scene line permutations
     scene_permutations = [[l1, l2] for l1, l2 in list(itertools.combinations(scene_lines, r=2))]
@@ -88,6 +104,8 @@ def do_test_run(set_number, algorithm):
     meta["scene_line_pairs"] = len(scene_permutations)
     meta["model_line_pairs"] = len(model_permutations)
 
+
+
     '''
     algorithm
     '''
@@ -95,20 +113,23 @@ def do_test_run(set_number, algorithm):
     # feed this to ransac
     if meta["ransac_type"] == "standard":
         start_time = time.time()
-        matching_correspondence, transformation_2d = ransac_draft(model_permutations, scene_permutations)
+        matching_correspondence, transformation_2d = ransac_draft(model_permutations, scene_permutations, rng)
         meta["duration"] = (time.time() - start_time)
 
     elif meta["ransac_type"] == "randomised":
         start_time = time.time()
-        matching_correspondence, transformation_2d = randomised_ransac(model_permutations, scene_permutations)
+        matching_correspondence, transformation_2d = randomised_ransac(model_permutations, scene_permutations, rng)
         meta["duration"] = (time.time() - start_time)
 
     elif meta["ransac_type"] == "adaptive":
         start_time = time.time()
-        matching_correspondence, transformation_2d = adaptive_ransac(model_permutations, scene_permutations)
+        matching_correspondence, transformation_2d = adaptive_ransac(model_permutations, scene_permutations, rng)
         meta["duration"] = (time.time() - start_time)
 
-
+    elif meta["ransac_type"] == "optimized":
+        start_time = time.time()
+        matching_correspondence, transformation_2d = optimized_ransac(model_permutations, scene_permutations, rng)
+        meta["duration"] = (time.time() - start_time)
 
 
     '''
@@ -176,15 +197,15 @@ def do_test_run(set_number, algorithm):
     save_image(blank_image, meta["path"] + dump_path + "matching_visuals" + str(meta["test_set_number"]) + ".png")
 
     # show to screen, block for user input
-    #if not meta["system"] == "Jetson Board":
-    #    plot_image(blank_image, "test set " + str(meta["test_set_number"]), True)
+    # if not meta["system"] == "Jetson Board":
+    #     plot_image(blank_image, "test set " + str(meta["test_set_number"]), True)
 
 
 if __name__ == "__main__":
 
-    algorithm_list = [ "adaptive", "standard", "randomised" ]
+    algorithm_list = ["optimized"]  # ["adaptive", "standard", "randomised"]
 
-    for test_num in range(1, 30, 1):
+    for test_num in range(40, 41, 1):
 
         for algo in algorithm_list:
             do_test_run(test_num, algo)

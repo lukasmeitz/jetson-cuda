@@ -23,21 +23,10 @@ def mle_ransac(model_line_pairs, scene_line_pairs):
     center_point = [256, 256]
 
     # ransac base line data
+    current_best_error = 999
     current_best_inliers = 0
     current_best_inliers_indices = []
     current_best_transformation = []
-
-    # generate an educated guess on how many iterations
-    # probability to choose an inlier from modellines
-    p_pick_inlier = 1 / len(scene_line_pairs)
-    print(p_pick_inlier)
-
-    # iterations needed
-    p_estimate = p_pick_inlier ** 2
-    k = np.log(1 - (0.999 * p_pick_inlier)) / np.log(1 - (p_estimate * p_pick_inlier))
-    ransac_iterations = int(k) * 10
-
-    print("proposed iterations: " + str(k))
 
     # generate random value vector (uniform sampled)
     random_sample_indices = np.random.rand(ransac_iterations, 2)

@@ -15,7 +15,7 @@ output:     matches         - vector of tuples [(FeatureIndexLeft, FeatureIndexR
 
 '''
 
-def ransac_draft(model_line_pairs, scene_line_pairs):
+def ransac_draft(model_line_pairs, scene_line_pairs, random_generator):
 
     # Ransac parameters
     ransac_iterations = 200  # number of iterations
@@ -42,7 +42,7 @@ def ransac_draft(model_line_pairs, scene_line_pairs):
     print("proposed iterations: " + str(k))
 
     # generate random value vector (uniform sampled)
-    random_sample_indices = np.random.rand(ransac_iterations, 2)
+    random_sample_indices = random_generator.random((ransac_iterations, 2))
     random_sample_indices *= [len(scene_line_pairs) - 1, len(model_line_pairs) - 1]
     random_sample_indices = np.round(random_sample_indices)
 

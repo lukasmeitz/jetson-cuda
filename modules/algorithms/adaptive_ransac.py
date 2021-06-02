@@ -15,7 +15,7 @@ output:     matches         - vector of tuples [(FeatureIndexLeft, FeatureIndexR
 
 '''
 
-def adaptive_ransac(model_line_pairs, scene_line_pairs):
+def adaptive_ransac(model_line_pairs, scene_line_pairs, random_generator):
 
     # Ransac parameters
     ransac_iterations = 20000  # number of iterations
@@ -35,13 +35,13 @@ def adaptive_ransac(model_line_pairs, scene_line_pairs):
         print( str(counter) + " of " + str(ransac_iterations))
 
         # generate random value vector (uniform sampled)
-        random_sample_indices = np.random.rand(1, 2)
+        random_sample_indices = random_generator.random(2)
         random_sample_indices *= [len(scene_line_pairs) - 1, len(model_line_pairs) - 1]
         random_sample_indices = np.round(random_sample_indices)
 
         # pick a random pair
-        sample_model_line_pair = model_line_pairs[int(random_sample_indices[0][1])]
-        sample_scene_line_pair = scene_line_pairs[int(random_sample_indices[0][0])]
+        sample_model_line_pair = model_line_pairs[int(random_sample_indices[1])]
+        sample_scene_line_pair = scene_line_pairs[int(random_sample_indices[0])]
 
         # find the transformation for these points
         t = define_transformation([sample_model_line_pair[0], sample_model_line_pair[1],
