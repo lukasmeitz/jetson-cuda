@@ -1,7 +1,7 @@
 import time
 
 import numpy as np
-import numba
+from numba import njit, prange
 from scipy.special import comb
 
 from modules.optimized.optimized_math import define_transformation, transform_modelline_batch, calc_line_distance, \
@@ -15,6 +15,7 @@ input:      reference_data  - vector of features from the left image (points or 
 output:     matches         - vector of tuples [(FeatureIndexLeft, FeatureIndexRight), ... ]
 
 '''
+
 
 def optimized_ransac(model_line_pairs, scene_line_pairs, random_generator):
 
@@ -57,12 +58,9 @@ def optimized_ransac(model_line_pairs, scene_line_pairs, random_generator):
     # perform RANSAC iterations
     for it in range(ransac_iterations):
 
-        # pick a random pair
-        sample_model_line_pair = model_line_pairs[int(random_sample_indices[it][1])]
-        sample_scene_line_pair = scene_line_pairs[int(random_sample_indices[it][0])]
-
-        # find the transformation for these points
-        t = define_transformation(sample_model_line_pair, sample_scene_line_pair,
+        # find the transformation for two random pairs
+        t = define_transformation(model_line_pairs[int(random_sample_indices[it][1])],
+                                  scene_line_pairs[int(random_sample_indices[it][0])],
                                   center_point)
 
         # convert all other model lines

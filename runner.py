@@ -1,5 +1,4 @@
 import datetime
-import itertools
 import json
 import os
 import time
@@ -10,13 +9,12 @@ from modules.algorithms.preprocessing import filter_lines
 from modules.algorithms.randomised_ransac import randomised_ransac
 from modules.algorithms.ransac_draft import ransac_draft
 from modules.handlers import *
-from modules.handlers.load_test_sets import load_test_set
+from modules.handlers.load_test_sets import load_test_set, create_line_permutations
 from modules.optimized.optimized_math import transform_line_batch
 from modules.optimized.optimized_ransac import optimized_ransac
 from modules.visuals.imaging import *
 from tests.test_imaging import *
 from tests.test_gtm_handler import *
-
 
 
 def do_test_run(set_number, algorithm):
@@ -64,25 +62,12 @@ def do_test_run(set_number, algorithm):
     meta["match_id_list_gtm"] = [int(mid)-1 for mid in match_id_list if mid != 0]
     meta["match_count_gtm"] = len(meta["match_id_list_gtm"])
 
-    # get rid of unnecessary data
-    scene_lines = [[p1[0][0], p1[1][0], p2[0][0], p2[1][0], mid] for p1, p2, vec, mid, len, ang in scene_lines]
-    model_lines = [[p1[0][0], p1[1][0], p2[0][0], p2[1][0], mid] for p1, p2, vec, _, len, ang, _, mid, _, _, _ in model_lines]
-
     scene_lines_postprocess = scene_lines
     model_lines_postprocess = model_lines
-
-    # give ids to lines
-    scene_lines = [[line[0], line[1], line[2], line[3], num] for num, line in enumerate(scene_lines)]
-    model_lines = [[line[0], line[1], line[2], line[3], num] for num, line in enumerate(model_lines)]
 
     # shuffle lines
     np.random.shuffle(scene_lines)
     np.random.shuffle(model_lines)
-
-    # create numpy array
-    scene_lines = np.array(scene_lines)
-    model_lines = np.array(model_lines)
-
 
 
     '''
@@ -94,16 +79,15 @@ def do_test_run(set_number, algorithm):
 
     # start preprocessing logic
     scene_lines = filter_lines(scene_lines)
-
-
+    model_lines = filter_lines(model_lines)
 
     # create scene line permutations
-    scene_permutations = [[l1, l2] for l1, l2 in list(itertools.combinations(scene_lines, r=2))]
-    model_permutations = [[l1, l2] for l1, l2 in list(itertools.combinations(model_lines, r=2))]
+    scene_permutations = create_line_permutations(scene_lines)
+    model_permutations = create_line_permutations(model_lines)
 
+    # add permuation count
     meta["scene_line_pairs"] = len(scene_permutations)
     meta["model_line_pairs"] = len(model_permutations)
-
 
 
     '''
@@ -147,12 +131,12 @@ def do_test_run(set_number, algorithm):
         sl = pair[1]
 
         # model line ids
-        ml1_id = model_permutations[ml][0][4]
-        ml2_id = model_permutations[ml][1][4]
+        ml1_id = int(model_permutations[ml][0][4])
+        ml2_id = int(model_permutations[ml][1][4])
 
         # scene line ids
-        sl1_id = scene_permutations[sl][0][4]
-        sl2_id = scene_permutations[sl][1][4]
+        sl1_id = int(scene_permutations[sl][0][4])
+        sl2_id = int(scene_permutations[sl][1][4])
 
         # save the matching relation
         if (ml1_id, sl1_id) not in matched_lines:
@@ -164,7 +148,6 @@ def do_test_run(set_number, algorithm):
     meta["match_id_list"] = matched_lines
     meta["match_count"] = len(matched_lines)
     meta["transformation"] = transformation_2d
-
 
     with open(meta["path"] + dump_path + "matching_result" + str(meta["test_set_number"]) + ".json", 'w') as fp:
         json.dump(meta, fp)
@@ -203,7 +186,7 @@ def do_test_run(set_number, algorithm):
 
 if __name__ == "__main__":
 
-    algorithm_list = ["optimized"]  # ["adaptive", "standard", "randomised"]
+    algorithm_list = ["adaptive"]  # ["optimized", "adaptive", "standard", "randomised"]
 
     for test_num in range(40, 41, 1):
 

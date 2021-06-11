@@ -20,6 +20,8 @@ def plot_image(image, text, blocking=False):
 
     if blocking:
         cv2.waitKey()
+    else:
+        cv2.waitKey(10)
 
 
 # format: np.array([x1,y1, x2, y2], ...)

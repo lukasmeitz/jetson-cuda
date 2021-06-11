@@ -4,6 +4,7 @@ from numba import jit
 
 # in: line1 = [p1x, p1y, p2x, p2y, id]
 # in: line2 = [p1x, p1y, p2x, p2y, id]
+@jit(nopython=True)
 def calc_min_pair_distance(ml1, ml2, sl1, sl2):
 
     error = 999
@@ -22,6 +23,7 @@ def calc_min_pair_distance(ml1, ml2, sl1, sl2):
     return error
 
 
+@jit(nopython=True)
 def calc_min_line_distance(line1, line2):
 
     error = 999
@@ -83,6 +85,7 @@ def calc_distance(a, b):
 # angle between two vectors
 # in:   a = [x, y]
 # in:   b = [x, y]
+@jit(nopython=True)
 def calc_angle(a, b):
 
     cos_winkel_1 = a[0] * b[0] + a[1] * b[1]
@@ -98,6 +101,7 @@ def calc_angle(a, b):
 
 # in:   linie1 = [p1x p1y p2x p2y]
 #       linie2 = [p1x p1y p2x p2y]
+#@jit(nopython=True)
 def calc_intersection(line1, line2):
 
     l1x = line1[0]
@@ -112,7 +116,15 @@ def calc_intersection(line1, line2):
     l2_xdiff = line2[2] - l2x
     l2_ydiff = line2[3] - l2y
 
-    y = (l2y - l1y - l2x / l1_xdiff * l1_ydiff + l1x / l1_xdiff * l1_ydiff) / (l2_xdiff / l1_xdiff * l1_ydiff - l2_ydiff)
+    yy = (l2y - l1y - ((l2x / l1_xdiff) * l1_ydiff) + ((l1x / l1_xdiff) * l1_ydiff))
+    #print("yy: " + str(yy))
+    xx = (l2_xdiff / l1_xdiff * l1_ydiff - l2_ydiff)
+    #print("xx: " + str(xx))
+
+    if xx == 0:
+        y = 0
+    else:
+        y = yy / xx
 
     return [l2x, l2y] + [y * l2_xdiff, y * l2_ydiff]
 
@@ -149,13 +161,14 @@ def transform_line_batch(lines, rotation_angle, transformation_distance, center_
         p2 = p2 + center_point + transformation_distance
         lines[i, 2:4] = p2
 
-    return lines
+    return np.array(lines)
 
 
 # in:   model_pairs = [modellines1, modellines2]
 #       rotation_angle = angle in degrees
 #       transformation distance = [distance_x, distance_y]
 #       center_point = [x y]
+@jit(nopython=True)
 def transform_modelline_batch(model_pairs, rotation_angle, transformation_distance, center_point):
 
     model_pairs[:, 0] = transform_line_batch(model_pairs[:, 0], rotation_angle, transformation_distance, center_point)
@@ -168,48 +181,36 @@ def transform_modelline_batch(model_pairs, rotation_angle, transformation_distan
 # in: X = [modelline1, modelline2, sceneline1, sceneline2]
 def define_transformation(model_line_pair, scene_line_pair, center_point):
 
-
     # berechne ursprungs-einheitsvektoren aus den modelllinien und scenelinien
-    ml1 = [ model_line_pair[0, 2] - model_line_pair[0, 0],
-            model_line_pair[0, 3] - model_line_pair[0, 1]]
+    ml1 = np.array([ model_line_pair[0, 2] - model_line_pair[0, 0],
+            model_line_pair[0, 3] - model_line_pair[0, 1]])
     ml1 = ml1 / np.linalg.norm(ml1)
 
-    sl1 = [ scene_line_pair[0, 2] - scene_line_pair[0, 0],
-            scene_line_pair[0, 3] - scene_line_pair[0, 1]]
+    sl1 = np.array([ scene_line_pair[0, 2] - scene_line_pair[0, 0],
+            scene_line_pair[0, 3] - scene_line_pair[0, 1]])
     sl1 = sl1 / np.linalg.norm(sl1)
     w1 = calc_angle(ml1, sl1)
 
-    ml2 = [model_line_pair[1, 2] - model_line_pair[1, 0],
-           model_line_pair[1, 3] - model_line_pair[1, 1]]
+    ml2 = np.array([model_line_pair[1, 2] - model_line_pair[1, 0],
+           model_line_pair[1, 3] - model_line_pair[1, 1]])
     ml2 = ml2 / np.linalg.norm(ml2)
-    sl2 = [ scene_line_pair[1, 2] - scene_line_pair[1, 0],
-            scene_line_pair[1, 3] - scene_line_pair[1, 1]]
+    sl2 = np.array([ scene_line_pair[1, 2] - scene_line_pair[1, 0],
+            scene_line_pair[1, 3] - scene_line_pair[1, 1]])
     sl2 = sl2 / np.linalg.norm(sl2)
     w2 = calc_angle(ml2, sl2)
 
     w = (w1 + w2) / 2 # beware the negative sign! i removed it
 
 
-    # correction of modelline 1
+    # correction of modellines
     model_line_pair_rotated = transform_line_batch(model_line_pair, w, np.array([0,0]), center_point)
+    m1 = model_line_pair_rotated[0]
+    m2 = model_line_pair_rotated[1]
 
-
-    m1_p1 = X[0][0:2]
-    m1_p2 = X[0][2:4]
-    m1_p1_corrected = r.dot([m1_p1[0] - center_point[0], m1_p1[1] - center_point[1]]) + center_point
-    m1_p2_corrected = r.dot([m1_p2[0] - center_point[0], m1_p2[1] - center_point[1]]) + center_point
-    m1 = [m1_p1_corrected[0], m1_p1_corrected[1], m1_p2_corrected[0], m1_p2_corrected[1]]
-
-    # correction of modelline 2
-    m2_p1 = X[1][0:2]
-    m2_p2 = X[1][2:4]
-    m2_p1_corrected = r.dot([m2_p1[0] - center_point[0], m2_p1[1] - center_point[1]]) + center_point
-    m2_p2_corrected = r.dot([m2_p2[0] - center_point[0], m2_p2[1] - center_point[1]]) + center_point
-    m2 = [m2_p1_corrected[0], m2_p1_corrected[1], m2_p2_corrected[0], m2_p2_corrected[1]]
 
     # regular scenelines 1 and 2
-    s1 = X[2]
-    s2 = X[3]
+    s1 = scene_line_pair[0]
+    s2 = scene_line_pair[1]
 
     # compensate translation
     w5 = abs(calc_angle(ml1, ml2))
@@ -223,14 +224,14 @@ def define_transformation(model_line_pair, scene_line_pair, center_point):
         scale_factor = 1  # there is no reasonable factor to calculate at this point
 
     else:
-        tx = np.mean([m1[0] - s1[0], m1[2] - s1[2], m2[0] - s2[0], m2[2] - s2[2]])
-        ty = np.mean([m1[1] - s1[1], m1[3] - s1[3], m2[1] - s2[1], m2[3] - s2[3]])
+        tx = np.mean(np.array([m1[0] - s1[0], m1[2] - s1[2], m2[0] - s2[0], m2[2] - s2[2]]))
+        ty = np.mean(np.array([m1[1] - s1[1], m1[3] - s1[3], m2[1] - s2[1], m2[3] - s2[3]]))
         t = [-tx, -ty]
 
-        scale_center = [(m1[0] + m1[2]) / 2, (m1[1] + m1[3]) / 2]
+        scale_center = np.array([(m1[0] + m1[2]) / 2, (m1[1] + m1[3]) / 2])
         scale_factor = 1  # there is no reasonable factor to calculate at this point
 
-    return [w, t[0], t[1], scale_factor, scale_center]  # , m1, m2]
+    return [w, t[0], t[1], scale_factor, scale_center]
 
     '''
     else:

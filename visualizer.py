@@ -34,9 +34,9 @@ if __name__ == "__main__":
             randomised_data[1] += [compute_correct_matches(test_case["match_id_list"])]
 
     plt.figure(1)
-    plt.plot(adaptive_data[0], 'r')
-    plt.plot(standard_data[0], 'b')
-    plt.plot(randomised_data[0], 'g')
+    plt.stem(range(len(adaptive_data[0])), adaptive_data[0], 'r')
+    plt.stem(range(len(standard_data[0])), standard_data[0], 'b')
+    plt.stem(range(len(randomised_data[0])), randomised_data[0], 'g')
     plt.ylabel('duration in s')
     plt.xlabel('test case number')
 
