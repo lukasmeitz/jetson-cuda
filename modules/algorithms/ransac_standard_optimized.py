@@ -57,12 +57,12 @@ def ransac_standard_optimized(model_lines, scene_lines,
         inliers = 0
         inlier_features = 0
         matches = []
-        for m in range(len(model_lines)):
+        for m in range(len(model_lines_transformed)):
             for s in range(len(scene_lines)):
 
-                if calc_min_distance(model_lines[m], scene_lines[s]) < threshold:
+                if calc_min_distance(model_lines_transformed[m], scene_lines[s]) < threshold:
                     inliers += 1
-                    matches.append([model_lines[m][6], scene_lines[s][6]])
+                    matches.append([model_lines_transformed[m][6], scene_lines[s][6]])
 
         if inliers > max_inliers:
             max_inliers = inliers

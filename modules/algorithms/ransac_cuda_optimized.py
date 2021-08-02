@@ -64,9 +64,11 @@ def transform_line_batch(lines, rotation, transformation_distance, center_point)
         # translate to origin
         lines[x, 0] -= center_point[0]
         lines[x, 1] -= center_point[1]
+
         # rotate
         lines[x, 0] = lines[x, 0] * rotation[0, 0] + lines[x, 1] * rotation[0, 1]
         lines[x, 1] = lines[x, 0] * rotation[1, 0] + lines[x, 1] * rotation[1, 1]
+
         # translate forth
         lines[x, 0] += center_point[0] + transformation_distance[0]
         lines[x, 1] += center_point[1] + transformation_distance[1]
@@ -87,6 +89,9 @@ def transform_line_batch(lines, rotation, transformation_distance, center_point)
 def ransac_cuda_optimized(model_lines, scene_lines,
                               model_line_indices, scene_line_indices,
                               random_generator, center):
+
+    # debug info
+    print("max combinations for evaluation: " + str(len(model_lines) * len(scene_lines)))
 
     # Parameters
     iterations = 50
@@ -121,71 +126,35 @@ def ransac_cuda_optimized(model_lines, scene_lines,
                       scene_lines[int(scene_pair_index[1])]]),
             center)
 
-        print(transformation)
 
         # batch transformation
         model_lines_transformed = np.copy(model_lines)
-        print(model_lines_transformed)
-        print(np.array(transformation[1:3]))
-
-        print("transforming ...")
-        transform_line_batch[blockspergrid, threadsperblock](np.array(model_lines_transformed),
+        transform_line_batch[blockspergrid, threadsperblock](model_lines_transformed,
                                                              np.array(transformation[0]),
                                                              np.array(transformation[1:3]),
                                                              center)
-        print("... done")
-        print(model_lines_transformed)
 
         # evaluation
-        inliers = 0
-        inlier_features = 0
-        matches = []
-        for m in range(len(model_lines)):
-            for s in range(len(scene_lines)):
+        results = np.zeros((len(model_lines_transformed) * len(scene_lines)))
+        evaluate_line_batch[blockspergrid, threadsperblock](model_lines_transformed, scene_lines, results)
 
-                if calc_min_distance(model_lines[m], scene_lines[s]) < threshold:
-                    inliers += 1
-                    matches.append([model_lines[m][6], scene_lines[s][6]])
+        matches = []
+        inliers = 0
+        for r in results:
+            if 0.0 < r < threshold:
+                inliers += 1
+
+        print("found " + str(inliers) + " inliers")
 
         if inliers > max_inliers:
             max_inliers = inliers
             best_transformation = transformation
-            # print("found " + str(inliers) + " inliers")
             # print(matches)
 
     # return
     # print("found max " + str(max_inliers) + " inliers")
     return matches, best_transformation
 
-
-
-
-def rest_code():
-
-    # evaluation invocation
-    evaluate_line_batch[blockspergrid, threadsperblock](model_lines, scene_lines, arr_results)
-
-    # print scores
-    print(arr_results)
-
-    # find smallest error
-    #iterate_2D_array[blockspergrid, threadsperblock](arr_results, result)
-
-    result = 9999.9
-    for n, r in enumerate(arr_results):
-        if result > r > 0.0:
-            result = r
-            idx = n
-
-    # count inlier
-    inlier = 0
-    threshold = 25
-    for r in arr_results:
-        if r < threshold:
-            inlier += 1
-
-
-    print(inlier)
 
 if __name__ == "__main__":
 
