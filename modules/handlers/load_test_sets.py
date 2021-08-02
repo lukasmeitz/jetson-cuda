@@ -5,12 +5,17 @@ import itertools
 from modules.visuals.imaging import draw_lines, plot_image
 
 
-def load_test_set(n, path):
+def load_test_set(n, path, demo=False):
 
     # load the file
     test_set_number = "{:03d}".format(n)
-    test_set_data = scipy.io.loadmat(path + 'data/TestSets/TestSet' + test_set_number + '/TestSet' + test_set_number + '.mat')
+    if not demo:
+        test_set_data = scipy.io.loadmat(path + 'data/TestSets/TestSet' + test_set_number + '/TestSet' + test_set_number + '.mat')
+    else:
+        test_set_data = scipy.io.loadmat(
+        path + 'data/TestSets_Demonstrator/TestSet' + test_set_number + '/TestSet' + test_set_number + '.mat')
 
+    #print(test_set_data)
 
     # save the sceneline array
     # fields of one vector: p1, p2, vec, mid, len, ang
@@ -21,12 +26,12 @@ def load_test_set(n, path):
     model_lines = test_set_data['Results_t']['Modellines_err'][0][:][0][0]
 
     # get rid of unnecessary data
-    scene_lines = [[p1[0][0], p1[1][0], p2[0][0], p2[1][0], mid] for p1, p2, vec, mid, len, ang in scene_lines]
-    model_lines = [[p1[0][0], p1[1][0], p2[0][0], p2[1][0], mid] for p1, p2, vec, _, len, ang, _, mid, _, _, _ in model_lines]
+    scene_lines = [[p1[0][0], p1[1][0], p2[0][0], p2[1][0], mid, ang[0][0], len[0][0]] for p1, p2, vec, mid, len, ang in scene_lines]
+    model_lines = [[p1[0][0], p1[1][0], p2[0][0], p2[1][0], mid, ang[0][0], len[0][0]] for p1, p2, vec, _, len, ang, _, mid, _, _, _ in model_lines]
 
     # give ids to lines
-    scene_lines = [[line[0], line[1], line[2], line[3], num] for num, line in enumerate(scene_lines)]
-    model_lines = [[line[0], line[1], line[2], line[3], num] for num, line in enumerate(model_lines)]
+    scene_lines = [[line[0], line[1], line[2], line[3], line[4], line[5], line[6], num] for num, line in enumerate(scene_lines)]
+    model_lines = [[line[0], line[1], line[2], line[3], line[4], line[5], line[6], num] for num, line in enumerate(model_lines)]
 
     # create numpy array
     scene_lines = np.array(scene_lines)

@@ -8,6 +8,7 @@ from modules.algorithms.adaptive_ransac import adaptive_ransac
 from modules.algorithms.preprocessing import filter_lines
 from modules.algorithms.randomised_ransac import randomised_ransac
 from modules.algorithms.ransac_draft import ransac_draft
+from modules.components.preprocessor import preprocessor
 from modules.handlers import *
 from modules.handlers.load_test_sets import load_test_set, create_line_permutations
 from modules.optimized.optimized_math import transform_line_batch
@@ -78,16 +79,12 @@ def do_test_run(set_number, algorithm):
     scene_lines = transform_line_batch(scene_lines, 0.0, np.array([0, 0]), np.array([256, 256]))
 
     # start preprocessing logic
-    scene_lines = filter_lines(scene_lines)
-    model_lines = filter_lines(model_lines)
-
-    # create scene line permutations
-    scene_permutations = create_line_permutations(scene_lines)
-    model_permutations = create_line_permutations(model_lines)
+    scene_line_pairs = preprocessor(scene_lines)
+    model_line_pairs = preprocessor(model_lines)
 
     # add permuation count
-    meta["scene_line_pairs"] = len(scene_permutations)
-    meta["model_line_pairs"] = len(model_permutations)
+    meta["scene_line_pairs"] = len(scene_line_pairs)
+    meta["model_line_pairs"] = len(model_line_pairs)
 
 
     '''

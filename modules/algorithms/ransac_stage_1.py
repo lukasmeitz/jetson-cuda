@@ -1,6 +1,7 @@
 import time
 
 import numpy as np
+from numba import jit, prange
 
 from modules.optimized.optimized_math import define_transformation, transform_modelline_batch, calc_line_distance, \
     calc_min_pair_distance, transform_line_batch, calc_min_line_distance
@@ -13,16 +14,16 @@ output:     matches         - vector of tuples [(FeatureIndexLeft, FeatureIndexR
 
 '''
 
-
 def ransac_stage_1(model_lines, scene_lines,
                    center_point, random_generator,
                    result_transformation, model_lines_transformed,
                    sync):
 
     # Ransac parameters
-    ransac_iterations = 200  # number of iterations
-    ransac_threshold = 25  # threshold
+    ransac_iterations = 1500  # number of iterations
+    ransac_threshold = 35  # threshold
     current_best_inliers = 0
+    min_error = 999
 
     # generate random value vector (uniform sampled)
     random_sample_indices = random_generator.random((ransac_iterations, 4))
@@ -43,6 +44,9 @@ def ransac_stage_1(model_lines, scene_lines,
 
                                   center_point)
 
+        if abs(t[0]) > 10:
+            continue
+
         result_transformation.append(t)
 
         # convert all other model lines
@@ -57,7 +61,7 @@ def ransac_stage_1(model_lines, scene_lines,
         error_values = []
         num_inliers = 0
 
-        for ind1 in range(len(model_lines_transformed)):
+        for ind1 in range(len(model_lines)):
             for ind2 in range(len(scene_lines)):
 
                 # take model and scene lines
@@ -67,19 +71,21 @@ def ransac_stage_1(model_lines, scene_lines,
                 # error function
                 #error = calc_min_line_distance(ml1, sl1)
                 error = calc_min_line_distance(ml1, sl1)
-                error_values += [error]
 
                 # check whether it's an inlier or not
                 if error < ransac_threshold:
                     inlier_index_list += [(ind1, ind2, error)]
                     num_inliers += 1
+                    error_values += [error]
 
         # in case a new model is better - cache it
-        if num_inliers >= current_best_inliers and num_inliers > 0:
+        if num_inliers >= current_best_inliers: # and num_inliers > 0:
             current_best_transformation = t
             current_best_inliers = num_inliers
+            min_error = sum(error_values)
 
             if sync.locked():
                 sync.release()
                 print(current_best_inliers)
-            time.sleep(0.6)
+                print(error_values)
+                time.sleep(0.8)

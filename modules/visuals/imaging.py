@@ -17,6 +17,7 @@ def plot_image(image, text, blocking=False):
 
     # draw using cv2 library
     cv2.imshow(str(text), image)
+    cv2.moveWindow(str(text), 100,100)
 
     if blocking:
         cv2.waitKey()
@@ -29,8 +30,8 @@ def draw_lines(image, lines, color=(128, 128, 128)):
 
     for line in lines:
         cv2.line(image,
-                 (round(line[0]), round(line[1])),
-                 (round(line[2]), round(line[3])),
+                 (int(line[0]), int(line[1])),
+                 (int(line[2]), int(line[3])),
                  color,
                  thickness=2)
 

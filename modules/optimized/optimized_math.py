@@ -70,6 +70,9 @@ def calc_line_distance(ml1, ml2, sl1, sl2):
     return np.mean([dist_m1s1, dist_m1s2, dist_m2s1, dist_m2s2])
 
 
+
+
+
 # distance between two points
 # in:   a = [x, y]
 # in:   b = [x, y]
