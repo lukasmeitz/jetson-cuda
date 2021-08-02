@@ -26,12 +26,12 @@ def load_test_set(n, path, demo=False):
     model_lines = test_set_data['Results_t']['Modellines_err'][0][:][0][0]
 
     # get rid of unnecessary data
-    scene_lines = [[p1[0][0], p1[1][0], p2[0][0], p2[1][0], mid, ang[0][0], len[0][0]] for p1, p2, vec, mid, len, ang in scene_lines]
-    model_lines = [[p1[0][0], p1[1][0], p2[0][0], p2[1][0], mid, ang[0][0], len[0][0]] for p1, p2, vec, _, len, ang, _, mid, _, _, _ in model_lines]
+    scene_lines = [[p1[0][0], p1[1][0], p2[0][0], p2[1][0], ang[0][0], len[0][0]] for p1, p2, vec, mid, len, ang in scene_lines]
+    model_lines = [[p1[0][0], p1[1][0], p2[0][0], p2[1][0], ang[0][0], len[0][0]] for p1, p2, vec, _, len, ang, _, mid, _, _, _ in model_lines]
 
     # give ids to lines
-    scene_lines = [[line[0], line[1], line[2], line[3], line[4], line[5], line[6], num] for num, line in enumerate(scene_lines)]
-    model_lines = [[line[0], line[1], line[2], line[3], line[4], line[5], line[6], num] for num, line in enumerate(model_lines)]
+    scene_lines = [[line[0], line[1], line[2], line[3], line[4], line[5], int(num)] for num, line in enumerate(scene_lines)]
+    model_lines = [[line[0], line[1], line[2], line[3], line[4], line[5], int(num)] for num, line in enumerate(model_lines)]
 
     # create numpy array
     scene_lines = np.array(scene_lines)

@@ -53,17 +53,17 @@ def preprocessor(lines, max_lines=150, local_thresh=40):
     for f in first:
         for s in second:
             if calc_advanced_cross_distance(f, s) < local_thresh:
-                pair_indices.append([f[7], s[7]])
+                pair_indices.append([f[6], s[6]])
 
     for f in first:
         for t in third:
             if calc_advanced_cross_distance(f, t) < local_thresh:
-                pair_indices.append([f[7], t[7]])
+                pair_indices.append([f[6], t[6]])
 
     for s in second:
         for t in third:
             if calc_advanced_cross_distance(s, t) < local_thresh:
-                pair_indices.append([s[7], t[7]])
+                pair_indices.append([s[6], t[6]])
 
     print("found " + str(len(pair_indices)) + " pairs")
     print(pair_indices)

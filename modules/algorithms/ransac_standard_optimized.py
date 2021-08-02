@@ -35,10 +35,13 @@ def ransac_standard_optimized(model_lines, scene_lines,
         model_pair_index = model_line_indices[random_sample_indices[i][0]]
         scene_pair_index = scene_line_indices[random_sample_indices[i][1]]
 
+
         # define transform
         transformation = define_transformation(
-            np.array([model_lines[model_pair_index[0]], model_lines[model_pair_index[1]]]),
-            np.array([scene_lines[scene_pair_index[0]], scene_lines[scene_pair_index[1]]]),
+            np.array([model_lines[int(model_pair_index[0])],
+                      model_lines[int(model_pair_index[1])]]),
+            np.array([scene_lines[int(scene_pair_index[0])],
+                      scene_lines[int(scene_pair_index[1])]]),
             center)
         # print(transformation)
         # print(np.transpose(transformation[:, 2]))
@@ -59,29 +62,16 @@ def ransac_standard_optimized(model_lines, scene_lines,
 
                 if calc_min_distance(model_lines[m], scene_lines[s]) < threshold:
                     inliers += 1
-                    matches.append([model_lines[m][7], scene_lines[s][7]])
-
-        #for m in range(len(model_line_pairs)):
-        #    for s in range(len(scene_line_pairs)):
-
-        #        if calc_min_pair_distance(model_lines[model_line_pairs[m][0]],
-        #                                  model_lines[model_line_pairs[m][1]],
-        #                                  scene_lines[scene_line_pairs[s][0]],
-        #                                  scene_lines[scene_line_pairs[s][1]]) < threshold:
-
-        #            inlier_features += 1
-                    #matches.append([model_lines[m][7], scene_lines[s][7]])
-
-
+                    matches.append([model_lines[m][6], scene_lines[s][6]])
 
         if inliers > max_inliers:
             max_inliers = inliers
             best_transformation = transformation
-            # print("found " + str(inliers) + " inliers")
-            # print(matches)
+            print("found " + str(inliers) + " inliers")
+            print(matches)
 
     # return
-    # print("found max " + str(max_inliers) + " inliers")
+    print("found max " + str(max_inliers) + " inliers")
     return matches, best_transformation
 
 
@@ -95,10 +85,10 @@ if __name__ == "__main__":
 
     # preprocess
     scene_lines, model_lines, match_id_list = load_test_set(set, "../../")
-    model_lines = np.array(model_lines)
-    scene_lines = np.array(scene_lines)
     scene_line_pairs = preprocessor(scene_lines, max_lines=120)
     model_line_pairs = preprocessor(model_lines, max_lines=120)
+    model_lines = np.array(model_lines)
+    scene_lines = np.array(scene_lines)
 
     # sample
     ransac_standard_optimized(model_lines, scene_lines,

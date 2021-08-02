@@ -102,11 +102,12 @@ if __name__ == "__main__":
     # input
     scene_lines, model_lines, match_id_list = load_test_set(10, '../../')
     arr = np.ones((200, 6))
+    print(arr.dtype)
     arr_ref = np.ones((200, 6)) * 3.0
 
     # output
     arr_results = np.zeros((len(model_lines) * len(scene_lines)))
-    print("len res array" + str(len(arr_results)))
+    print("len res array: " + str(len(arr_results)))
 
     # parameter
     tr = np.array([5.0, 1.0])
@@ -122,6 +123,9 @@ if __name__ == "__main__":
     # preprocess
     scene_lines = filter_lines(scene_lines, max_lines=80)
     model_lines = filter_lines(model_lines, max_lines=50)
+    print(model_lines)
+    model_lines = np.array(model_lines).astype('float64')
+    print(model_lines.dtype)
 
 
 
@@ -133,12 +137,18 @@ if __name__ == "__main__":
 
 
 
+
+    # test array transform
+    result = np.ones((100,4))
+    add_to_a_2D_array[blockspergrid, threadsperblock](result, np.array([2.0, 2.0, 2.0, 2.0]))
+    print(result)
+
     # transform batch invocation
-    transform_line_batch[blockspergrid, threadsperblock](model_lines, r, tr, center)
+    transform_line_batch[blockspergrid, threadsperblock](arr, r, tr, center)
 
 
     # evaluation invocation
-    evaluate_line_batch[blockspergrid, threadsperblock](model_lines, scene_lines, arr_results)
+    #evaluate_line_batch[blockspergrid, threadsperblock](model_lines, scene_lines, arr_results)
 
     # print scores
     print(arr_results)

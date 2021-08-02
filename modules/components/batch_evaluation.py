@@ -27,5 +27,7 @@ def count_inlier_mle(model_lines, scene_lines, threshold=35):
                 inlier += 1
                 error += tmp_error
                 matches.append([model_lines[m][7], scene_lines[s][7]])
+            else:
+                error += threshold
 
-    return inlier, matches
+    return inlier, matches, error
