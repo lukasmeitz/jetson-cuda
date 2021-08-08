@@ -1,5 +1,7 @@
 
 import math
+from functools import reduce
+
 import numpy as np
 
 from numba import cuda
@@ -27,32 +29,28 @@ def evaluate_line_batch(lines, reference_lines, scores):
     m, s = cuda.grid(2)
     if m < lines.shape[0] and s < reference_lines.shape[0]:
 
-        # cross distances
-        scores[((lines.shape[0]-1) * s) + m] = math.sqrt((lines[m, 0] - reference_lines[s, 0])**2)
+        # line1 point 1 to line2 distance
+        dist_11 = math.sqrt(
+            (reference_lines[s][0] - lines[m][0]) ** 2
+            + (reference_lines[s][1] - lines[m][1]) ** 2)
 
-        scores[((lines.shape[0]-1) * s) + m] = max(
-            scores[((lines.shape[0] - 1) * s) + m],
-            math.sqrt((lines[m, 1] - reference_lines[s, 1])**2)
-        )
+        dist_12 = math.sqrt(
+            (reference_lines[s][2] - lines[m][0]) ** 2
+            + (reference_lines[s][3] - lines[m][1]) ** 2)
 
-        scores[((lines.shape[0]-1) * s) + m] = max(
-            scores[((lines.shape[0] - 1) * s) + m],
-            math.sqrt((lines[m, 2] - reference_lines[s, 2])**2)
-        )
+        if dist_11 < dist_12:
+            dist_2 = math.sqrt(
+            (reference_lines[s][2] - lines[m][2]) ** 2
+            + (reference_lines[s][3] - lines[m][3]) ** 2)
 
-        scores[((lines.shape[0]-1) * s) + m] = max(
-            scores[((lines.shape[0] - 1) * s) + m],
-            math.sqrt((lines[m, 3] - reference_lines[s, 3])**2)
-        )
+            scores[((lines.shape[0]) * s) + m] = (dist_11 + dist_2) / 2
+        else:
+            dist_2 = math.sqrt(
+                (reference_lines[s][0] - lines[m][2]) ** 2
+                + (reference_lines[s][1] - lines[m][3]) ** 2)
+            scores[((lines.shape[0]) * s) + m] = (dist_12 + dist_2) / 2
 
-        # accumulate
-        #scores[((lines.shape[0]-1) * s) + m] = (lines[m, 0] - reference_lines[s, 0])
-        #scores[(lines.shape[0] * s) + m] += (lines[m, 1] - reference_lines[s, 1])
-        #scores[(lines.shape[0] * s) + m] += (lines[m, 2] - reference_lines[s, 2])
-        #scores[(lines.shape[0] * s) + m] += (lines[m, 3] - reference_lines[s, 3])
 
-        # reduce
-        scores[(lines.shape[0] * s) + m] /= 4
 
 
 @cuda.jit
@@ -85,25 +83,26 @@ def transform_line_batch(lines, rotation, transformation_distance, center_point)
         lines[x, 3] += center_point[1] + transformation_distance[1]
 
 
+@cuda.reduce
+def count_inlier_error(a, b):
+    return a + min(b, 35)
+
 
 def ransac_cuda_optimized(model_lines, scene_lines,
-                              model_line_indices, scene_line_indices,
-                              random_generator, center):
+                          model_line_indices, scene_line_indices,
+                          random_generator, center,
+                          threshold=50):
 
     # debug info
     print("max combinations for evaluation: " + str(len(model_lines) * len(scene_lines)))
 
     # Parameters
-    iterations = 50
-    threshold = 25
+    iterations = 200
     max_inliers = -1
+    best_error = 99999999
     best_transformation = []
 
     # GPU setup
-    threadsperblock = (16, 16)
-    blockspergrid_x = np.math.ceil(model_lines.shape[0] / threadsperblock[0])
-    blockspergrid_y = np.math.ceil(model_lines.shape[1] / threadsperblock[1])
-    blockspergrid = (blockspergrid_x, blockspergrid_y)
 
     # generate samples
     random_sample_indices = random_generator.random((iterations, 2))
@@ -129,37 +128,89 @@ def ransac_cuda_optimized(model_lines, scene_lines,
 
         # batch transformation
         model_lines_transformed = np.copy(model_lines)
+        threadsperblock = (16, 16)
+        blockspergrid_x = np.math.ceil(model_lines.shape[0] / threadsperblock[0])
+        blockspergrid_y = np.math.ceil(model_lines.shape[1] / threadsperblock[1])
+        blockspergrid = (blockspergrid_x, blockspergrid_y)
         transform_line_batch[blockspergrid, threadsperblock](model_lines_transformed,
                                                              np.array(transformation[0]),
                                                              np.array(transformation[1:3]),
                                                              center)
 
         # evaluation
-        results = np.zeros((len(model_lines_transformed) * len(scene_lines)))
-        evaluate_line_batch[blockspergrid, threadsperblock](model_lines_transformed, scene_lines, results)
+        #results = np.zeros((len(model_lines_transformed) * len(scene_lines)))
+        #blockspergrid_x = np.math.ceil(len(model_lines_transformed) / threadsperblock[0])
+        #blockspergrid_y = np.math.ceil(len(scene_lines) / threadsperblock[1])
+        #blockspergrid = (blockspergrid_x, blockspergrid_y)
+        #evaluate_line_batch[blockspergrid, threadsperblock](model_lines_transformed, scene_lines, results)
 
-        matches = []
+
+        # evaluation
+        error = 0.0
         inliers = 0
-        for r in results:
-            if 0.0 < r < threshold:
-                inliers += 1
+        inlier_features = 0
+        matches = []
+        for m in range(len(model_lines_transformed)):
+            for s in range(len(scene_lines)):
 
-        print("found " + str(inliers) + " inliers")
+                tmp_error = calc_min_distance(model_lines_transformed[m], scene_lines[s])
+                if tmp_error < threshold:
+                    inliers += 1
+                    error += tmp_error
+                    matches.append([model_lines_transformed[m][6], scene_lines[s][6]])
+                else:
+                    error += threshold
 
-        if inliers > max_inliers:
+        # if inliers > max_inliers:
+        if error < best_error:
             max_inliers = inliers
+            best_error = error
+            best_matches = matches
             best_transformation = transformation
-            # print(matches)
+            print(error)
 
-    # return
-    # print("found max " + str(max_inliers) + " inliers")
-    return matches, best_transformation
+        # 37 left, 800 - 37 = 763 missing
+        # print(len(model_lines_transformed))
+        # print(len(scene_lines))
+        # print(results[-800:-1])
+
+        #error = 0.0
+        #for r in results:
+        #    #error += min(r, threshold)
+        #    if r < threshold:
+        #        error += r
+
+        #error_reduce = reduce(lambda x, y: x+min(y, threshold), results)
+        #print("lambda error : " + str(error_reduce))
+        #print("lambda counted " + str(len(results)))
+        #print("lambda avg error " + str(error_reduce/len(results)))
+        #print()
+
+        #error_cuda = count_inlier_error(results)
+        #cuda_reduce = cuda.reduce(lambda x, y: x+min(y, threshold))
+        #error_cuda = cuda_reduce(results)
+
+        #print("cuda error: " + str(error_cuda))
+        #print()
+
+        #print("normal error: " + str(error))
+        #print("normal counted " + str(counter))
+        #print("normal avg error " + str(error/counter))
+        #print()
+
+        #if error < best_error:
+        #    best_error = error
+        #    best_transformation = transformation
+        #    print(error)
+
+    print(best_transformation)
+    return [], best_transformation
 
 
 if __name__ == "__main__":
 
     # prepare
-    center =  np.array([1280/2, 720/2])  # np.array([256, 256])
+    center = np.array([1280/2, 720/2])  # np.array([256, 256])
     set = 70
     seed = 2000
     rng = np.random.default_rng(seed)

@@ -4,16 +4,11 @@ import os
 import time
 from sys import platform
 
-from modules.algorithms.adaptive_ransac import adaptive_ransac
-from modules.algorithms.preprocessing import filter_lines
-from modules.algorithms.randomised_ransac import randomised_ransac
-from modules.algorithms.ransac_draft import ransac_draft
+from modules.algorithms.ransac_cuda_optimized import ransac_cuda_optimized
+from modules.algorithms.ransac_standard_optimized import ransac_standard_optimized
+from modules.components.batch_transformation import transform_line_batch
 from modules.components.preprocessor import preprocessor
-from modules.handlers import *
-from modules.handlers.load_test_sets import load_test_set, create_line_permutations
-from modules.optimized.optimized_math import transform_line_batch
-from modules.optimized.optimized_ransac import optimized_ransac
-from modules.visuals.imaging import *
+from modules.handlers.load_test_sets import load_test_set
 from tests.test_imaging import *
 from tests.test_gtm_handler import *
 
@@ -50,8 +45,9 @@ def do_test_run(set_number, algorithm):
         print("skipping")
         return
 
-    seed = 2021
+    seed = 3268
     rng = np.random.default_rng(seed)
+    center = np.array([1280/2, 720/2]) if set_number < 51 else np.array([256, 256])
 
     '''
     data loading
@@ -66,17 +62,13 @@ def do_test_run(set_number, algorithm):
     scene_lines_postprocess = scene_lines
     model_lines_postprocess = model_lines
 
-    # shuffle lines
-    np.random.shuffle(scene_lines)
-    np.random.shuffle(model_lines)
-
 
     '''
     preprocessing
     '''
 
     # transformation onto the scenelines
-    scene_lines = transform_line_batch(scene_lines, 0.0, np.array([0, 0]), np.array([256, 256]))
+    #scene_lines = transform_line_batch(scene_lines, 0.0, np.array([0, 0]), center_point=center)
 
     # start preprocessing logic
     scene_line_pairs = preprocessor(scene_lines)
@@ -94,22 +86,16 @@ def do_test_run(set_number, algorithm):
     # feed this to ransac
     if meta["ransac_type"] == "standard":
         start_time = time.time()
-        matching_correspondence, transformation_2d = ransac_draft(model_permutations, scene_permutations, rng)
+        matching_correspondence, transformation_2d = ransac_standard_optimized(model_lines, scene_lines,
+                                                                               model_line_pairs, scene_line_pairs,
+                                                                               rng, center)
         meta["duration"] = (time.time() - start_time)
 
-    elif meta["ransac_type"] == "randomised":
+    elif meta["ransac_type"] == "cuda":
         start_time = time.time()
-        matching_correspondence, transformation_2d = randomised_ransac(model_permutations, scene_permutations, rng)
-        meta["duration"] = (time.time() - start_time)
-
-    elif meta["ransac_type"] == "adaptive":
-        start_time = time.time()
-        matching_correspondence, transformation_2d = adaptive_ransac(model_permutations, scene_permutations, rng)
-        meta["duration"] = (time.time() - start_time)
-
-    elif meta["ransac_type"] == "optimized":
-        start_time = time.time()
-        matching_correspondence, transformation_2d = optimized_ransac(model_permutations, scene_permutations, rng)
+        matching_correspondence, transformation_2d = ransac_cuda_optimized(model_lines, scene_lines,
+                                                                               model_line_pairs, scene_line_pairs,
+                                                                               rng, center)
         meta["duration"] = (time.time() - start_time)
 
 
@@ -117,34 +103,11 @@ def do_test_run(set_number, algorithm):
     post processing
     '''
 
-    # data structure for line ids: [(id_model_1, id_scene_1), ..., (id_model_n, id_scene_m)]
-    matched_lines = []
+    meta["match_id_list"] = matching_correspondence
+    meta["match_count"] = len(matching_correspondence)
 
-    # get line ids from pair ids
-    for pair in matching_correspondence:
-
-        # model line and scene line ids
-        ml = pair[0]
-        sl = pair[1]
-
-        # model line ids
-        ml1_id = int(model_permutations[ml][0][4])
-        ml2_id = int(model_permutations[ml][1][4])
-
-        # scene line ids
-        sl1_id = int(scene_permutations[sl][0][4])
-        sl2_id = int(scene_permutations[sl][1][4])
-
-        # save the matching relation
-        if (ml1_id, sl1_id) not in matched_lines:
-            matched_lines += [(ml1_id, sl1_id)]
-
-        if (ml2_id, sl2_id) not in matched_lines:
-            matched_lines += [(ml2_id, sl2_id)]
-
-    meta["match_id_list"] = matched_lines
-    meta["match_count"] = len(matched_lines)
-    meta["transformation"] = transformation_2d
+    #print(transformation_2d)
+    #meta["transformation"] = transformation_2d
 
     with open(meta["path"] + dump_path + "matching_result" + str(meta["test_set_number"]) + ".json", 'w') as fp:
         json.dump(meta, fp)
@@ -162,30 +125,35 @@ def do_test_run(set_number, algorithm):
     draw_lines(blank_image, scene_lines, (0, 0, 255))
 
     # draw model lines
-    draw_lines(blank_image, model_lines, (0, 255, 0))
+    model_lines_transformed = transform_line_batch(model_lines,
+                                                   transformation_2d[0],
+                                                   transformation_2d[1:3],
+                                                   center)
+    draw_lines(blank_image, model_lines_transformed, (0, 255, 0))
 
     # draw the connection lines
     connection_lines = []
-    for match in matched_lines:
-        p1 = model_lines_postprocess[match[0]][4]
-        p2 = scene_lines_postprocess[match[1]][4]
-        connection_lines += [[float(p1[0]), float(p1[1]), float(p2[0]), float(p2[1])]]
+    #for match in matching_correspondence:
+        #p1 = model_lines_postprocess[int(match[0])][7]
+        #p2 = scene_lines_postprocess[int(match[1])][7]
+        #connection_lines += [[float(p1[0]), float(p1[1]), float(p2[0]), float(p2[1])]]
 
-    draw_lines(blank_image, connection_lines, (255, 255, 0))
+    #draw_lines(blank_image, connection_lines, (255, 255, 0))
 
     # write image to disc
     save_image(blank_image, meta["path"] + dump_path + "matching_visuals" + str(meta["test_set_number"]) + ".png")
 
     # show to screen, block for user input
-    # if not meta["system"] == "Jetson Board":
-    #     plot_image(blank_image, "test set " + str(meta["test_set_number"]), True)
+    if not meta["system"] == "Jetson Board":
+         plot_image(blank_image, "test set " + str(meta["test_set_number"]), True)
 
 
 if __name__ == "__main__":
 
-    algorithm_list = ["adaptive"]  # ["optimized", "adaptive", "standard", "randomised"]
+    algorithm_list = ["cuda", "standard"]
+    test_list = [5, 10, 65, 66, 67, 68, 69, 70]
 
-    for test_num in range(40, 41, 1):
+    for test_num in test_list:
 
         for algo in algorithm_list:
             do_test_run(test_num, algo)

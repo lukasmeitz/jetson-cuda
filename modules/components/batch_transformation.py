@@ -12,10 +12,11 @@ def get_rotation_matrix_2d(rotation_angle):
     return r
 
 
-def transform_line_batch(lines, r, transformation_distance, center_point):
+def transform_line_batch(lines_in, r, transformation_distance, center_point):
 
     # rotation matrix
     #r = get_rotation_matrix_2d(rotation_angle)
+    lines = np.copy(lines_in)
 
     for i in range(len(lines)):
 

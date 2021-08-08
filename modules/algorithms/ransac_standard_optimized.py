@@ -10,22 +10,20 @@ import numpy as np
 
 def ransac_standard_optimized(model_lines, scene_lines,
                               model_line_indices, scene_line_indices,
-                              random_generator, center):
+                              random_generator, center,
+                              threshold=50):
 
     # Parameters
-    iterations = 50
-    threshold = 25
+    iterations = 200
     max_inliers = -1
+    best_matches = []
+    best_error = 99999
     best_transformation = []
-    print(str(len(model_line_indices)) + " model line pairs")
-    print(str(len(scene_line_indices)) + " scene line pairs")
 
     # generate samples
     random_sample_indices = random_generator.random((iterations, 2))
     random_sample_indices *= [len(model_line_indices)-1, len(scene_line_indices)-1]
     random_sample_indices = np.round(random_sample_indices).astype(int)
-    print("max index model: " + str(max(random_sample_indices[:, 0])))
-    print("max index scene: " + str(max(random_sample_indices[:, 1])))
 
     # loop through
     for i in range(iterations):
@@ -54,25 +52,32 @@ def ransac_standard_optimized(model_lines, scene_lines,
         # print("transformed " + str(len(model_lines_transformed)) + " lines")
 
         # evaluation
+        error = 0.0
         inliers = 0
         inlier_features = 0
         matches = []
         for m in range(len(model_lines_transformed)):
             for s in range(len(scene_lines)):
 
-                if calc_min_distance(model_lines_transformed[m], scene_lines[s]) < threshold:
+                tmp_error = calc_min_distance(model_lines_transformed[m], scene_lines[s])
+                if tmp_error < threshold:
                     inliers += 1
+                    error += tmp_error
                     matches.append([model_lines_transformed[m][6], scene_lines[s][6]])
+                else:
+                    error += threshold
 
-        if inliers > max_inliers:
+        # if inliers > max_inliers:
+        if error < best_error:
             max_inliers = inliers
+            best_error = error
+            best_matches = matches
             best_transformation = transformation
-            print("found " + str(inliers) + " inliers")
-            print(matches)
+            print(error)
 
     # return
     print("found max " + str(max_inliers) + " inliers")
-    return matches, best_transformation
+    return best_matches, best_transformation
 
 
 if __name__ == "__main__":

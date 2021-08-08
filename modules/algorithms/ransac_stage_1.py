@@ -87,5 +87,5 @@ def ransac_stage_1(model_lines, scene_lines,
             if sync.locked():
                 sync.release()
                 print(current_best_inliers)
-                print(error_values)
+                #print(error_values)
                 time.sleep(0.8)

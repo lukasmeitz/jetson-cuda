@@ -76,7 +76,7 @@ def calc_line_distance(ml1, ml2, sl1, sl2):
 # distance between two points
 # in:   a = [x, y]
 # in:   b = [x, y]
-#@jit(nopython=True)
+@jit(nopython=True)
 def calc_distance(a, b):
 
     x_dist = b[0] - a[0]

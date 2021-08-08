@@ -84,7 +84,7 @@ def run_demonstration(path):
         scene_lines[0] = filter_lines(scene_lines[0], max_lines=80)
         model_lines[0] = filter_lines(model_lines[0], max_lines=50)
 
-        #print(scene_lines[0])
+        print(scene_lines[0])
 
         ransac_stage_1(model_lines[0],
                        scene_lines[0],

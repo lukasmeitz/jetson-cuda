@@ -3,13 +3,14 @@ import numpy as np
 
 from modules.components.evaluation import calc_min_distance, calc_advanced_cross_distance
 from modules.handlers.load_test_sets import load_test_set
+from itertools import combinations
 
-
-def preprocessor(lines, max_lines=150, local_thresh=40):
+def preprocessor(lines, max_lines=90, local_thresh=50, debug=False):
 
     # form of input: line = [p1x, p1y, p2x, p2y, mid, angle, len]
-    print("processing " + str(len(lines)) + " lines")
-    print(lines[0])
+    if debug:
+        print("processing " + str(len(lines)) + " lines")
+        print(lines[0])
 
     # space for return values
     pair_indices = []
@@ -33,10 +34,11 @@ def preprocessor(lines, max_lines=150, local_thresh=40):
             first.append(line)
         if 60 < ang <= 120:
             second.append(line)
-        if 120 < ang <= 180:
+        if 120 < ang:
             third.append(line)
 
-    print("bin content after sort: " + str(len(first))
+    if debug:
+        print("bin content after sort: " + str(len(first))
           + ", " + str(len(second))
           + ", " + str(len(third)))
 
@@ -45,7 +47,8 @@ def preprocessor(lines, max_lines=150, local_thresh=40):
     second = second[:max_lines//3]
     third = third[:max_lines//3]
 
-    print("bin content after culling: " + str(len(first))
+    if debug:
+        print("bin content after culling: " + str(len(first))
           + ", " + str(len(second))
           + ", " + str(len(third)))
 
@@ -65,13 +68,18 @@ def preprocessor(lines, max_lines=150, local_thresh=40):
             if calc_advanced_cross_distance(s, t) < local_thresh:
                 pair_indices.append([s[6], t[6]])
 
-    print("found " + str(len(pair_indices)) + " pairs")
-    print(pair_indices)
+    if len(pair_indices) < 10:
+        pair_indices = list(combinations(range(len(lines)), 2))
+        pass
+
+    if debug:
+        print("found " + str(len(pair_indices)) + " pairs")
+        print(pair_indices)
 
     return pair_indices
 
 
 if __name__ == "__main__":
 
-    scene_lines, model_lines, match_id_list = load_test_set(70, "../../")
+    scene_lines, model_lines, match_id_list = load_test_set(72, "../../")
     preprocessor(scene_lines)
