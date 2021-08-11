@@ -55,8 +55,8 @@ def define_transformation_opencv(model_lines, scene_lines):
 
 def define_transformation_pair_opencv(ml1, ml2, sl1, sl2):
 
-    p = np.array([ml1[0:2], ml1[2:4], ml2[0:2]]).astype(np.float32)
-    p_prime = np.array([sl1[0:2], sl1[2:4], sl2[0:2]]).astype(np.float32)
+    p = np.array([ml1[0:2], ml1[2:4], ml2[2:4]]).astype(np.float32)
+    p_prime = np.array([sl1[0:2], sl1[2:4], sl2[2:4]]).astype(np.float32)
 
     return cv2.getAffineTransform(p, p_prime)
 
@@ -183,6 +183,7 @@ def define_transformation_numpy(p, p_prime):
                             (0, 0, 0, 1)))
 
 
+
 def define_transformation(model_line_pair, scene_line_pair, center_point):
 
     # pair = [line1, line2]
@@ -205,7 +206,7 @@ def define_transformation(model_line_pair, scene_line_pair, center_point):
     sl2 = sl2 / np.linalg.norm(sl2)
     w2 = calc_angle(ml2, sl2)
 
-    w = (w1 + w2) / 2 # beware the negative sign! i removed it
+    w =  (w1 + w2) / 2 # beware the negative sign! i removed it
 
 
     # correction of modellines

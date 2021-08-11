@@ -45,9 +45,9 @@ def do_test_run(set_number, algorithm):
         print("skipping")
         return
 
-    seed = 3268
+    seed = 3124
     rng = np.random.default_rng(seed)
-    center = np.array([1280/2, 720/2]) if set_number < 51 else np.array([256, 256])
+    center = np.array([1280/2, 720/2]) if set_number > 51 else np.array([256, 256])
 
     '''
     data loading
@@ -113,13 +113,14 @@ def do_test_run(set_number, algorithm):
         json.dump(meta, fp)
 
     print("found " + str(meta["match_count"]) + " of " + str(meta["match_count_gtm"]) + " matches")
+    print("took " + str(meta["duration"]) + " seconds")
     print()
 
     '''
     visualization
     '''
-
-    blank_image = np.ones((512,512, 3), np.uint8) * 255
+    image_size = center * 2
+    blank_image = np.ones((int(image_size[1]), int(image_size[0]), 3), np.uint8) * 255
 
     # draw scene lines
     draw_lines(blank_image, scene_lines, (0, 0, 255))
@@ -150,8 +151,8 @@ def do_test_run(set_number, algorithm):
 
 if __name__ == "__main__":
 
-    algorithm_list = ["cuda", "standard"]
-    test_list = [5, 10, 65, 66, 67, 68, 69, 70]
+    algorithm_list = ["cuda"] #, "standard"]
+    test_list = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 67, 68, 69, 70]
 
     for test_num in test_list:
 

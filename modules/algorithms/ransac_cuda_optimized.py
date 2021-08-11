@@ -24,7 +24,7 @@ def iterate_2D_array(an_array, result):
 
 
 @cuda.jit
-def evaluate_line_batch(lines, reference_lines, scores):
+def evaluate_line_batch(lines, reference_lines, scores, threshold):
 
     m, s = cuda.grid(2)
     if m < lines.shape[0] and s < reference_lines.shape[0]:
@@ -50,7 +50,7 @@ def evaluate_line_batch(lines, reference_lines, scores):
                 + (reference_lines[s][1] - lines[m][3]) ** 2)
             scores[((lines.shape[0]) * s) + m] = (dist_12 + dist_2) / 2
 
-
+        scores[((lines.shape[0]) * s) + m] = min(scores[((lines.shape[0]) * s) + m], threshold)
 
 
 @cuda.jit
@@ -59,20 +59,17 @@ def transform_line_batch(lines, rotation, transformation_distance, center_point)
     x = cuda.grid(1)
     if x < lines.shape[0]:
 
-        # translate to origin
+        # translate p1 to origin
         lines[x, 0] -= center_point[0]
         lines[x, 1] -= center_point[1]
-
         # rotate
         lines[x, 0] = lines[x, 0] * rotation[0, 0] + lines[x, 1] * rotation[0, 1]
         lines[x, 1] = lines[x, 0] * rotation[1, 0] + lines[x, 1] * rotation[1, 1]
-
         # translate forth
         lines[x, 0] += center_point[0] + transformation_distance[0]
         lines[x, 1] += center_point[1] + transformation_distance[1]
 
-
-        # p2
+        # translate p2 to origin
         lines[x, 2] -= center_point[0]
         lines[x, 3] -= center_point[1]
         # rotate
@@ -85,7 +82,7 @@ def transform_line_batch(lines, rotation, transformation_distance, center_point)
 
 @cuda.reduce
 def count_inlier_error(a, b):
-    return a + min(b, 35)
+    return a + b
 
 
 def ransac_cuda_optimized(model_lines, scene_lines,
@@ -97,7 +94,7 @@ def ransac_cuda_optimized(model_lines, scene_lines,
     print("max combinations for evaluation: " + str(len(model_lines) * len(scene_lines)))
 
     # Parameters
-    iterations = 200
+    iterations = 1500
     max_inliers = -1
     best_error = 99999999
     best_transformation = []
@@ -125,6 +122,11 @@ def ransac_cuda_optimized(model_lines, scene_lines,
                       scene_lines[int(scene_pair_index[1])]]),
             center)
 
+        # bail-out-test
+        w = np.rad2deg(np.arccos(transformation[0][0,0]))
+        t = np.sum(np.abs(transformation[1:3]))
+        if t > 150 or w > 30:
+            continue
 
         # batch transformation
         model_lines_transformed = np.copy(model_lines)
@@ -137,37 +139,40 @@ def ransac_cuda_optimized(model_lines, scene_lines,
                                                              np.array(transformation[1:3]),
                                                              center)
 
-        # evaluation
-        #results = np.zeros((len(model_lines_transformed) * len(scene_lines)))
-        #blockspergrid_x = np.math.ceil(len(model_lines_transformed) / threadsperblock[0])
-        #blockspergrid_y = np.math.ceil(len(scene_lines) / threadsperblock[1])
-        #blockspergrid = (blockspergrid_x, blockspergrid_y)
-        #evaluate_line_batch[blockspergrid, threadsperblock](model_lines_transformed, scene_lines, results)
-
 
         # evaluation
-        error = 0.0
-        inliers = 0
-        inlier_features = 0
-        matches = []
-        for m in range(len(model_lines_transformed)):
-            for s in range(len(scene_lines)):
+        results = np.zeros((len(model_lines_transformed) * len(scene_lines)))
+        blockspergrid_x = np.math.ceil(len(model_lines_transformed) / threadsperblock[0])
+        blockspergrid_y = np.math.ceil(len(scene_lines) / threadsperblock[1])
+        blockspergrid = (blockspergrid_x, blockspergrid_y)
+        evaluate_line_batch[blockspergrid, threadsperblock](model_lines_transformed, scene_lines, results, threshold)
 
-                tmp_error = calc_min_distance(model_lines_transformed[m], scene_lines[s])
-                if tmp_error < threshold:
-                    inliers += 1
-                    error += tmp_error
-                    matches.append([model_lines_transformed[m][6], scene_lines[s][6]])
-                else:
-                    error += threshold
+        error_cuda = count_inlier_error(results)
+
+        # evaluation
+        #error = 0.0
+        #inliers = 0
+        #inlier_features = 0
+        #matches = []
+        #for m in range(len(model_lines_transformed)):
+        #    for s in range(len(scene_lines)):
+
+        #        tmp_error = calc_min_distance(model_lines_transformed[m], scene_lines[s])
+        #        if tmp_error < threshold:
+        #            inliers += 1
+        #            error += tmp_error
+        #            matches.append([model_lines_transformed[m][6], scene_lines[s][6]])
+        #        else:
+        #            error += threshold
+
 
         # if inliers > max_inliers:
-        if error < best_error:
-            max_inliers = inliers
-            best_error = error
-            best_matches = matches
+        if error_cuda < best_error:
+            #max_inliers = inliers
+            best_error = error_cuda
+            #best_matches = matches
             best_transformation = transformation
-            print(error)
+            print(error_cuda)
 
         # 37 left, 800 - 37 = 763 missing
         # print(len(model_lines_transformed))
@@ -186,7 +191,6 @@ def ransac_cuda_optimized(model_lines, scene_lines,
         #print("lambda avg error " + str(error_reduce/len(results)))
         #print()
 
-        #error_cuda = count_inlier_error(results)
         #cuda_reduce = cuda.reduce(lambda x, y: x+min(y, threshold))
         #error_cuda = cuda_reduce(results)
 

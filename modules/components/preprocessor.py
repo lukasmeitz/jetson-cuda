@@ -5,7 +5,7 @@ from modules.components.evaluation import calc_min_distance, calc_advanced_cross
 from modules.handlers.load_test_sets import load_test_set
 from itertools import combinations
 
-def preprocessor(lines, max_lines=90, local_thresh=50, debug=False):
+def preprocessor(lines, max_lines=30, local_thresh=50, debug=False):
 
     # form of input: line = [p1x, p1y, p2x, p2y, mid, angle, len]
     if debug:
