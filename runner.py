@@ -4,11 +4,18 @@ import os
 import time
 from sys import platform
 
+from modules.algorithms.preprocessing import filter_lines
+from modules.algorithms.ransac_cuda_opencv import ransac_cuda_opencv
 from modules.algorithms.ransac_cuda_optimized import ransac_cuda_optimized
+from modules.algorithms.ransac_cuda_pairmatch import ransac_cuda_pairmatch
+from modules.algorithms.ransac_cuda_simple import ransac_cuda_simple
+from modules.algorithms.ransac_stage_1 import ransac_stage_1
+from modules.algorithms.ransac_standard import ransac_standard
 from modules.algorithms.ransac_standard_optimized import ransac_standard_optimized
 from modules.components.batch_transformation import transform_line_batch
-from modules.components.preprocessor import preprocessor
+from modules.components.preprocessor import preprocessor, preprocess_length
 from modules.handlers.load_test_sets import load_test_set
+from modules.optimized.optimized_math import get_rotation_matrix_2d
 from tests.test_imaging import *
 from tests.test_gtm_handler import *
 
@@ -45,7 +52,7 @@ def do_test_run(set_number, algorithm):
         print("skipping")
         return
 
-    seed = 3124
+    seed = 3126
     rng = np.random.default_rng(seed)
     center = np.array([1280/2, 720/2]) if set_number > 51 else np.array([256, 256])
 
@@ -70,13 +77,9 @@ def do_test_run(set_number, algorithm):
     # transformation onto the scenelines
     #scene_lines = transform_line_batch(scene_lines, 0.0, np.array([0, 0]), center_point=center)
 
-    # start preprocessing logic
-    scene_line_pairs = preprocessor(scene_lines)
-    model_line_pairs = preprocessor(model_lines)
-
     # add permuation count
-    meta["scene_line_pairs"] = len(scene_line_pairs)
-    meta["model_line_pairs"] = len(model_line_pairs)
+    #meta["scene_line_pairs"] = len(scene_line_pairs)
+    #meta["model_line_pairs"] = len(model_line_pairs)
 
 
     '''
@@ -84,8 +87,25 @@ def do_test_run(set_number, algorithm):
     '''
 
     # feed this to ransac
+
+    if meta["ransac_type"] == "first":
+        start_time = time.time()
+
+        scene_lines_filtered = filter_lines(scene_lines, max_lines=80)
+        model_lines_filtered = filter_lines(model_lines, max_lines=50)
+
+        matching_correspondence, transformation_2d = ransac_standard(model_lines_filtered,
+                                                                     scene_lines_filtered,
+                                                                     rng,
+                                                                     center)
+        meta["duration"] = (time.time() - start_time)
+
     if meta["ransac_type"] == "standard":
         start_time = time.time()
+
+        scene_line_pairs = preprocessor(scene_lines, max_lines=120)
+        model_line_pairs = preprocessor(model_lines)
+
         matching_correspondence, transformation_2d = ransac_standard_optimized(model_lines, scene_lines,
                                                                                model_line_pairs, scene_line_pairs,
                                                                                rng, center)
@@ -93,7 +113,45 @@ def do_test_run(set_number, algorithm):
 
     elif meta["ransac_type"] == "cuda":
         start_time = time.time()
+
+        scene_line_pairs = preprocessor(scene_lines, max_lines=120)
+        model_line_pairs = preprocessor(model_lines)
         matching_correspondence, transformation_2d = ransac_cuda_optimized(model_lines, scene_lines,
+                                                                               model_line_pairs, scene_line_pairs,
+                                                                               rng, center)
+        meta["duration"] = (time.time() - start_time)
+
+    elif meta["ransac_type"] == "simple":
+        start_time = time.time()
+
+        #scene_lines_filtered = np.array(preprocess_length(scene_lines, max_lines=40))
+       # model_lines_filtered = np.array(preprocess_length(model_lines, max_lines=80))
+
+        matching_correspondence, transformation_2d = ransac_cuda_simple(np.array(model_lines),
+                                                                        np.array(scene_lines),
+                                                                        rng,
+                                                                        center)
+        meta["duration"] = (time.time() - start_time)
+
+    elif meta["ransac_type"] == "pairwise":
+        start_time = time.time()
+
+        scene_lines_filtered = np.array(preprocess_length(scene_lines, max_lines=100))
+        model_lines_filtered = np.array(preprocess_length(model_lines, max_lines=100))
+
+        matching_correspondence, transformation_2d = ransac_cuda_pairmatch(model_lines_filtered,
+                                                                        scene_lines_filtered,
+                                                                        rng,
+                                                                        center)
+        meta["duration"] = (time.time() - start_time)
+
+    elif meta["ransac_type"] == "opencv":
+        start_time = time.time()
+
+        scene_line_pairs = preprocessor(scene_lines, max_lines=1000)
+        model_line_pairs = preprocessor(model_lines)
+
+        matching_correspondence, transformation_2d = ransac_cuda_opencv(model_lines, scene_lines,
                                                                                model_line_pairs, scene_line_pairs,
                                                                                rng, center)
         meta["duration"] = (time.time() - start_time)
@@ -104,7 +162,14 @@ def do_test_run(set_number, algorithm):
     '''
 
     meta["match_id_list"] = matching_correspondence
-    meta["match_count"] = len(matching_correspondence)
+
+    # get true positives
+    match_positives = 0
+    for c in matching_correspondence:
+        if c[0] == c[1]:
+            match_positives += 1
+    meta["match_count"] = match_positives
+    meta["negative_count"] = len(matching_correspondence) - match_positives
 
     #print(transformation_2d)
     #meta["transformation"] = transformation_2d
@@ -113,6 +178,7 @@ def do_test_run(set_number, algorithm):
         json.dump(meta, fp)
 
     print("found " + str(meta["match_count"]) + " of " + str(meta["match_count_gtm"]) + " matches")
+    print("found " + str(meta["negative_count"]) + " false matches")
     print("took " + str(meta["duration"]) + " seconds")
     print()
 
@@ -126,33 +192,51 @@ def do_test_run(set_number, algorithm):
     draw_lines(blank_image, scene_lines, (0, 0, 255))
 
     # draw model lines
-    model_lines_transformed = transform_line_batch(model_lines,
-                                                   transformation_2d[0],
-                                                   transformation_2d[1:3],
-                                                   center)
+    if meta["ransac_type"] == "opencv":
+        model_lines_transformed = transform_line_batch(model_lines,
+                                                       np.array(transformation_2d[:2, :2]),
+                                                       np.array(transformation_2d[:, 2]),
+                                                       center)
+    else:
+        model_lines_transformed = transform_line_batch(model_lines,
+                                                       transformation_2d[0],
+                                                       transformation_2d[1:3],
+                                                       center)
+
     draw_lines(blank_image, model_lines_transformed, (0, 255, 0))
 
     # draw the connection lines
     connection_lines = []
-    #for match in matching_correspondence:
-        #p1 = model_lines_postprocess[int(match[0])][7]
-        #p2 = scene_lines_postprocess[int(match[1])][7]
-        #connection_lines += [[float(p1[0]), float(p1[1]), float(p2[0]), float(p2[1])]]
+    for match in matching_correspondence:
+        p1 = get_midpoint(model_lines_transformed[int(match[0])])
+        p2 = get_midpoint(scene_lines_postprocess[int(match[1])])
+        connection_lines += [[float(p1[0]), float(p1[1]), float(p2[0]), float(p2[1])]]
 
-    #draw_lines(blank_image, connection_lines, (255, 255, 0))
+    draw_lines(blank_image, connection_lines, (0, 0, 0))
 
     # write image to disc
     save_image(blank_image, meta["path"] + dump_path + "matching_visuals" + str(meta["test_set_number"]) + ".png")
 
     # show to screen, block for user input
     if not meta["system"] == "Jetson Board":
-         plot_image(blank_image, "test set " + str(meta["test_set_number"]), True)
+         plot_image(blank_image, "test set " + str(meta["test_set_number"]), False)
+
+
+
+def get_midpoint(line):
+
+    p1 = line[0:2]
+    p2 = line[2:4]
+
+    return ((p2 - p1) / 2) + p1
 
 
 if __name__ == "__main__":
 
-    algorithm_list = ["cuda"] #, "standard"]
-    test_list = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 67, 68, 69, 70]
+    # "standard" "cuda" "first" "simple" "pairwise"
+    algorithm_list = ["standard"]
+    #2,  25, 30, 35, 40, 45, 50,
+    test_list = [2, 6, 11, 16, 21, 26, 31, 36, 41, 46, 52, 65, 66, 67, 68, 69, 70, 71, 72]
 
     for test_num in test_list:
 

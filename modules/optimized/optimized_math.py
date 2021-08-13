@@ -4,7 +4,6 @@ from numba import jit
 
 # in: line1 = [p1x, p1y, p2x, p2y, id]
 # in: line2 = [p1x, p1y, p2x, p2y, id]
-@jit(nopython=True)
 def calc_min_pair_distance(ml1, ml2, sl1, sl2):
 
     error = 999
@@ -23,10 +22,7 @@ def calc_min_pair_distance(ml1, ml2, sl1, sl2):
     return error
 
 
-@jit(nopython=True)
 def calc_min_line_distance(line1, line2):
-
-    error = 999
 
     # line1 point 1 to line2 distance
     dist_11 = calc_distance(line1[0:2], line2[0:2])
@@ -76,7 +72,6 @@ def calc_line_distance(ml1, ml2, sl1, sl2):
 # distance between two points
 # in:   a = [x, y]
 # in:   b = [x, y]
-@jit(nopython=True)
 def calc_distance(a, b):
 
     x_dist = b[0] - a[0]
@@ -88,7 +83,6 @@ def calc_distance(a, b):
 # angle between two vectors
 # in:   a = [x, y]
 # in:   b = [x, y]
-@jit(nopython=True)
 def calc_angle(a, b):
 
     cos_winkel_1 = a[0] * b[0] + a[1] * b[1]
@@ -132,7 +126,6 @@ def calc_intersection(line1, line2):
     return [l2x, l2y] + [y * l2_xdiff, y * l2_ydiff]
 
 
-@jit(nopython=True)
 def get_rotation_matrix_2d(rotation_angle):
 
     # calculate a rotation matrix

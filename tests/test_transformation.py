@@ -1,7 +1,7 @@
 from modules.components.batch_transformation import transform_line_batch, get_rotation_matrix_2d
 from modules.components.transformation import define_transformation_opencv, define_transformation_numpy, \
     define_transformation_numpy_pairs, define_transformation_pair_opencv, define_transformation_pair_midpoint_opencv, \
-    define_transformation, define_perspective_transformation
+    define_transformation, define_perspective_transformation, define_transformation_rigid_opencv
 from modules.handlers.load_test_sets import load_test_set
 from sys import platform
 import numpy as np
@@ -34,7 +34,7 @@ def test_transformation():
 
     scene_lines, model_lines = load_data(2)
     model_lines_transformed = transform_line_batch(model_lines,
-                                                   get_rotation_matrix_2d(0),
+                                                   get_rotation_matrix_2d(10),
                                                    np.array([25,0]),
                                                    np.array([256, 256]))
 
@@ -98,6 +98,20 @@ def test_transformation():
     print(m5)
     print("took " + str(duration) + " seconds")
     print()
+
+    start_time = time.time()
+    m7 = define_transformation_rigid_opencv(model_lines[1],
+                                            model_lines[2],
+                                            model_lines_transformed[1],
+                                            model_lines_transformed[2],
+                                            np.array([256, 256]))
+    duration = (time.time() - start_time)
+    print("OPENCV rigid transformation")
+    print(m7)
+    print("took " + str(duration) + " seconds")
+    print()
+
+
 
 
 

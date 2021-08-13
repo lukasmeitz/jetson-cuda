@@ -53,15 +53,19 @@ def define_transformation_opencv(model_lines, scene_lines):
     return transform_matrix
 
 
-def define_transformation_pair_opencv(ml1, ml2, sl1, sl2):
+def define_transformation_pair_opencv(ml1, ml2, sl1, sl2, center):
 
-    p = np.array([ml1[0:2], ml1[2:4], ml2[2:4]]).astype(np.float32)
-    p_prime = np.array([sl1[0:2], sl1[2:4], sl2[2:4]]).astype(np.float32)
+    p = np.array([ml1[0:2] - center,
+                  ml1[2:4] - center,
+                  ml2[2:4] - center]).astype(np.float32)
+    p_prime = np.array([sl1[0:2] - center,
+                        sl1[2:4] - center,
+                        sl2[2:4] - center]).astype(np.float32)
 
     return cv2.getAffineTransform(p, p_prime)
 
 
-def define_transformation_pair_midpoint_opencv(ml1, ml2, sl1, sl2):
+def define_transformation_pair_midpoint_opencv(ml1, ml2, sl1, sl2, center):
     # create ml triangle
     p3m = calc_intersection(ml1, ml2)
 
@@ -93,6 +97,22 @@ def define_transformation_pair_midpoint_opencv(ml1, ml2, sl1, sl2):
     p_prime = np.array((p1s, p2s, (p3s[0], p3s[1]))).astype(np.float32)
 
     return cv2.getAffineTransform(p, p_prime)
+
+
+
+def define_transformation_rigid_opencv(ml1, ml2, sl1, sl2, center):
+
+    p = np.array([ml1[0:2] - center,
+                  ml1[2:4] - center,
+                  ml2[2:4] - center,
+                  ml2[0:2] - center]).astype(np.float32)
+    p_prime = np.array([sl1[0:2] - center,
+                        sl1[2:4] - center,
+                        sl2[2:4] - center,
+                        ml2[0:2] - center]).astype(np.float32)
+
+    return cv2.estimateAffinePartial2D(p, p_prime)[0]
+
 
 
 def define_transformation_numpy_pairs(ml1, ml2, sl1, sl2):

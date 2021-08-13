@@ -8,7 +8,8 @@ from numba import cuda
 
 from modules.components.evaluation import calc_min_distance
 from modules.components.preprocessor import preprocessor
-from modules.components.transformation import define_transformation
+from modules.components.transformation import define_transformation, define_transformation_pair_opencv, \
+    define_transformation_pair_midpoint_opencv, define_transformation_rigid_opencv
 from modules.handlers.load_test_sets import load_test_set
 
 
@@ -85,20 +86,21 @@ def count_inlier_error(a, b):
     return a + b
 
 
-def ransac_cuda_optimized(model_lines, scene_lines,
+def ransac_cuda_opencv(model_lines, scene_lines,
                           model_line_indices, scene_line_indices,
                           random_generator, center,
-                          threshold=40):
+                          threshold=50):
 
     # debug info
     print("max combinations for evaluation: " + str(len(model_lines) * len(scene_lines)))
 
     # Parameters
-    iterations = 500
-    max_inliers = 0
+    iterations = 5000
+    max_inliers = -1
     best_error = 99999999
     best_transformation = []
-    best_matches = []
+
+    # GPU setup
 
     # generate samples
     random_sample_indices = random_generator.random((iterations, 2))
@@ -114,17 +116,18 @@ def ransac_cuda_optimized(model_lines, scene_lines,
         scene_pair_index = scene_line_indices[random_sample_indices[i][1]]
 
         # define transform
-        transformation = define_transformation(
-            np.array([model_lines[int(model_pair_index[0])],
-                      model_lines[int(model_pair_index[1])]]),
-            np.array([scene_lines[int(scene_pair_index[0])],
-                      scene_lines[int(scene_pair_index[1])]]),
+        transformation = define_transformation_rigid_opencv(
+            model_lines[int(model_pair_index[0])],
+            model_lines[int(model_pair_index[1])],
+            scene_lines[int(scene_pair_index[0])],
+            scene_lines[int(scene_pair_index[1])],
             center)
 
         # bail-out-test
-        w = np.rad2deg(np.arccos(transformation[0][0, 0]))
-        t = np.sum(np.abs(transformation[1:3]))
-        if t > 100 or w > 60:
+        w = np.rad2deg(np.arccos(transformation[0, 0] % 1))
+        s = np.sum(transformation[:2, :2])
+        t = np.sum(np.abs(transformation[:, 2]))
+        if t > 150 or w > 35:
             continue
 
         # batch transformation
@@ -134,8 +137,8 @@ def ransac_cuda_optimized(model_lines, scene_lines,
         blockspergrid_y = np.math.ceil(model_lines.shape[1] / threadsperblock[1])
         blockspergrid = (blockspergrid_x, blockspergrid_y)
         transform_line_batch[blockspergrid, threadsperblock](model_lines_transformed,
-                                                             np.array(transformation[0]),
-                                                             np.array(transformation[1:3]),
+                                                             np.array(transformation[:2, :2]),
+                                                             np.array(transformation[:, 2]),
                                                              center)
 
         # evaluation
@@ -147,28 +150,71 @@ def ransac_cuda_optimized(model_lines, scene_lines,
 
         error_cuda = count_inlier_error(results)
 
+        # evaluation
+        #error = 0.0
+        #inliers = 0
+        #inlier_features = 0
+        #matches = []
+        #for m in range(len(model_lines_transformed)):
+        #    for s in range(len(scene_lines)):
+
+        #        tmp_error = calc_min_distance(model_lines_transformed[m], scene_lines[s])
+        #        if tmp_error < threshold:
+        #            inliers += 1
+        #            error += tmp_error
+        #            matches.append([model_lines_transformed[m][6], scene_lines[s][6]])
+        #        else:
+        #            error += threshold
+
+
+        # if inliers > max_inliers:
         if error_cuda < best_error:
+            #max_inliers = inliers
             best_error = error_cuda
+            #best_matches = matches
             best_transformation = transformation
 
-            best_matches.clear()
-            max_inliers = 0
+        # 37 left, 800 - 37 = 763 missing
+        # print(len(model_lines_transformed))
+        # print(len(scene_lines))
+        # print(results[-800:-1])
 
-            c = 0
-            for n, r in enumerate(results):
+        #error = 0.0
+        #for r in results:
+        #    #error += min(r, threshold)
+        #    if r < threshold:
+        #        error += r
 
-                # id generation: scores[((lines.shape[0]) * s) + m]
+        #error_reduce = reduce(lambda x, y: x+min(y, threshold), results)
+        #print("lambda error : " + str(error_reduce))
+        #print("lambda counted " + str(len(results)))
+        #print("lambda avg error " + str(error_reduce/len(results)))
+        #print()
 
-                # this means inlier
-                if r < threshold:
-                    m = c % len(model_lines)
-                    s = np.floor(c / len(model_lines))
-                    best_matches.append((int(m), int(s)))
-                    max_inliers += 1
+        #cuda_reduce = cuda.reduce(lambda x, y: x+min(y, threshold))
+        #error_cuda = cuda_reduce(results)
 
-                c += 1
+        #print("cuda error: " + str(error_cuda))
+        #print()
 
-    return best_matches, best_transformation
+        #print("normal error: " + str(error))
+        #print("normal counted " + str(counter))
+        #print("normal avg error " + str(error/counter))
+        #print()
+
+        #if error < best_error:
+        #    best_error = error
+        #    best_transformation = transformation
+        #    print(error)
+
+    print()
+    print(best_transformation)
+    w = np.rad2deg(np.arccos(best_transformation[0, 0] % 1))
+    print("final rotation: " + str(w))
+    if len(best_transformation) == 0:
+        return [], transformation
+    else:
+        return [], best_transformation
 
 
 if __name__ == "__main__":
@@ -187,7 +233,7 @@ if __name__ == "__main__":
     model_line_pairs = preprocessor(model_lines, max_lines=120)
 
     # sample
-    matches, transform = ransac_cuda_optimized(model_lines, scene_lines,
+    matches, transform = ransac_cuda_opencv(model_lines, scene_lines,
                               model_line_pairs, scene_line_pairs,
                               rng, center)
     print(matches)

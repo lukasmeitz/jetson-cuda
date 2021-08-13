@@ -24,7 +24,7 @@ def iterate_2D_array(an_array, result):
 
 
 @cuda.jit
-def evaluate_line_batch(lines, reference_lines, scores, threshold):
+def evaluate_line_batch(lines, reference_lines, scores, inliers, threshold):
 
     m, s = cuda.grid(2)
     if m < lines.shape[0] and s < reference_lines.shape[0]:
@@ -43,14 +43,63 @@ def evaluate_line_batch(lines, reference_lines, scores, threshold):
             (reference_lines[s][2] - lines[m][2]) ** 2
             + (reference_lines[s][3] - lines[m][3]) ** 2)
 
-            scores[((lines.shape[0]) * s) + m] = (dist_11 + dist_2) / 2
+            res = dist_11 + dist_2
+            #scores[((lines.shape[0]) * s) + m] = (dist_11 + dist_2) / 2
         else:
             dist_2 = math.sqrt(
                 (reference_lines[s][0] - lines[m][2]) ** 2
                 + (reference_lines[s][1] - lines[m][3]) ** 2)
-            scores[((lines.shape[0]) * s) + m] = (dist_12 + dist_2) / 2
 
-        scores[((lines.shape[0]) * s) + m] = min(scores[((lines.shape[0]) * s) + m], threshold)
+            res = dist_12 + dist_2
+            #scores[((lines.shape[0]) * s) + m] = (dist_12 + dist_2) / 2
+
+        if res < threshold:
+            scores[((lines.shape[0]) * s) + m] = res
+            inliers[((lines.shape[0]) * s) + m] = 1
+        else:
+            scores[((lines.shape[0]) * s) + m] = 0
+            inliers[((lines.shape[0]) * s) + m] = 0
+
+
+@cuda.jit
+def take_pairs(model_lines, scene_lines, results, threshold):
+
+    m, s = cuda.grid(2)
+
+    if m < model_lines.shape[0] and s < scene_lines.shape[0]:
+
+        # length difference
+        len_ml = model_lines[m][5]
+        len_sl = scene_lines[s][5]
+        len_diff = abs((len_ml - len_sl))
+
+        # angle
+        vec_ml1 = model_lines[m][2] - model_lines[m][0]
+        vec_ml2 = model_lines[m][3] - model_lines[m][1]
+
+        vec_sl1 = scene_lines[m][2] - scene_lines[m][0]
+        vec_sl2 = scene_lines[m][3] - scene_lines[m][1]
+
+        cos_1 = vec_ml1 * vec_sl1 + vec_ml2 * vec_sl2
+        cos_2 = -vec_ml2 * vec_sl1 + vec_ml1 * vec_sl2
+        angle = math.degrees(math.acos(min(abs(cos_1), 1)))
+
+        if cos_1 * cos_2 < 0:
+            angle = -angle
+
+        # distance midpoints
+        mid_ml1 = vec_ml1 / 2 + model_lines[m][0]
+        mid_ml2 = vec_ml2 / 2 + model_lines[m][1]
+
+        mid_sl1 = vec_sl1 / 2 + scene_lines[s][0]
+        mid_sl2 = vec_sl2 / 2 + scene_lines[s][1]
+
+        mid_dist = math.sqrt(
+            (mid_ml1 - mid_sl1) ** 2
+            + (mid_ml2 - mid_sl2) ** 2)
+
+        if mid_dist < threshold and angle < 30 and len_diff < 20:
+            results[((model_lines.shape[0]) * s) + m] = 1
 
 
 @cuda.jit
@@ -85,8 +134,19 @@ def count_inlier_error(a, b):
     return a + b
 
 
-def ransac_cuda_optimized(model_lines, scene_lines,
-                          model_line_indices, scene_line_indices,
+@cuda.jit
+def map_inlier_bool(result_matrix, threshold):
+
+    x = cuda.grid(1)
+
+    if x < result_matrix.shape[0]:
+        if result_matrix[x] < threshold:
+            result_matrix[x] = 1
+        else:
+            result_matrix[x] = 0
+
+
+def ransac_cuda_simple(model_lines, scene_lines,
                           random_generator, center,
                           threshold=40):
 
@@ -94,37 +154,33 @@ def ransac_cuda_optimized(model_lines, scene_lines,
     print("max combinations for evaluation: " + str(len(model_lines) * len(scene_lines)))
 
     # Parameters
-    iterations = 500
-    max_inliers = 0
+    iterations = 2000
+    best_inliers = 0
     best_error = 99999999
     best_transformation = []
     best_matches = []
 
     # generate samples
-    random_sample_indices = random_generator.random((iterations, 2))
-    random_sample_indices *= [len(model_line_indices)-1, len(scene_line_indices)-1]
+    random_sample_indices = random_generator.random((iterations, 4))
+    random_sample_indices *= [len(model_lines)-1, len(model_lines)-1,
+                              len(scene_lines)-1, len(scene_lines)-1]
     random_sample_indices = np.round(random_sample_indices).astype(int)
 
     # loop through
     for i in range(iterations):
 
-        # resolve index
-        # print("picking " + str(random_sample_indices[i]))
-        model_pair_index = model_line_indices[random_sample_indices[i][0]]
-        scene_pair_index = scene_line_indices[random_sample_indices[i][1]]
-
         # define transform
         transformation = define_transformation(
-            np.array([model_lines[int(model_pair_index[0])],
-                      model_lines[int(model_pair_index[1])]]),
-            np.array([scene_lines[int(scene_pair_index[0])],
-                      scene_lines[int(scene_pair_index[1])]]),
+            np.array([model_lines[int(random_sample_indices[i][0])],
+                      model_lines[int(random_sample_indices[i][1])]]),
+            np.array([scene_lines[int(random_sample_indices[i][2])],
+                      scene_lines[int(random_sample_indices[i][3])]]),
             center)
 
         # bail-out-test
         w = np.rad2deg(np.arccos(transformation[0][0, 0]))
         t = np.sum(np.abs(transformation[1:3]))
-        if t > 100 or w > 60:
+        if t > 100 or w > 30:
             continue
 
         # batch transformation
@@ -140,54 +196,33 @@ def ransac_cuda_optimized(model_lines, scene_lines,
 
         # evaluation
         results = np.zeros((len(model_lines_transformed) * len(scene_lines)))
+        inliers = np.zeros((len(model_lines_transformed) * len(scene_lines)))
         blockspergrid_x = np.math.ceil(len(model_lines_transformed) / threadsperblock[0])
         blockspergrid_y = np.math.ceil(len(scene_lines) / threadsperblock[1])
         blockspergrid = (blockspergrid_x, blockspergrid_y)
-        evaluate_line_batch[blockspergrid, threadsperblock](model_lines_transformed, scene_lines, results, threshold)
+        evaluate_line_batch[blockspergrid, threadsperblock](model_lines_transformed,
+                                                            scene_lines,
+                                                            results,
+                                                            inliers,
+                                                            threshold)
 
         error_cuda = count_inlier_error(results)
+        inliers_cuda = count_inlier_error(inliers)
 
-        if error_cuda < best_error:
+        if inliers_cuda > best_inliers and error_cuda < best_error:
+            best_inliers = inliers_cuda
             best_error = error_cuda
             best_transformation = transformation
-
             best_matches.clear()
-            max_inliers = 0
 
-            c = 0
-            for n, r in enumerate(results):
-
+            for n, r in enumerate(inliers):
                 # id generation: scores[((lines.shape[0]) * s) + m]
+                if r == 1:
+                    m = n % len(model_lines)
+                    s = np.floor(n / len(model_lines))
+                    best_matches.append((int(model_lines[int(m)][6]), int(scene_lines[int(s)][6])))
 
-                # this means inlier
-                if r < threshold:
-                    m = c % len(model_lines)
-                    s = np.floor(c / len(model_lines))
-                    best_matches.append((int(m), int(s)))
-                    max_inliers += 1
-
-                c += 1
+            print("found " + str(best_inliers) + " inliers")
 
     return best_matches, best_transformation
 
-
-if __name__ == "__main__":
-
-    # prepare
-    center = np.array([1280/2, 720/2])  # np.array([256, 256])
-    set = 70
-    seed = 2000
-    rng = np.random.default_rng(seed)
-
-    # preprocess
-    scene_lines, model_lines, match_id_list = load_test_set(set, "../../")
-    model_lines = np.array(model_lines)
-    scene_lines = np.array(scene_lines)
-    scene_line_pairs = preprocessor(scene_lines, max_lines=120)
-    model_line_pairs = preprocessor(model_lines, max_lines=120)
-
-    # sample
-    matches, transform = ransac_cuda_optimized(model_lines, scene_lines,
-                              model_line_pairs, scene_line_pairs,
-                              rng, center)
-    print(matches)

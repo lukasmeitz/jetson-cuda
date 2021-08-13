@@ -38,7 +38,7 @@ def drawing_thread(model_lines_transformed, scene_lines, img):
         if model_lines_transformed[0] is not 0:
 
             image = img[0].copy()
-            #draw_lines(image, scene_lines[0], color=(0, 0, 255))
+            #draw_current(image, scene_lines[0])
             draw_current(image, model_lines_transformed[0])
 
         if lock.is_set():
@@ -84,7 +84,7 @@ def run_demonstration(path):
         scene_lines[0] = filter_lines(scene_lines[0], max_lines=80)
         model_lines[0] = filter_lines(model_lines[0], max_lines=50)
 
-        print(scene_lines[0])
+        #print(scene_lines[0])
 
         ransac_stage_1(model_lines[0],
                        scene_lines[0],

@@ -22,7 +22,7 @@ def filter_lines(lines, max_lines=75):
     #return_lines += take_longest(second, max_lines//3)
     #return_lines += take_longest(third, max_lines//3)
 
-    return_lines = take_longest(lines, max_lines=60)
+    return_lines = take_longest(lines, max_lines)
 
     return np.array(return_lines)
 

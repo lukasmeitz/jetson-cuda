@@ -11,10 +11,10 @@ import numpy as np
 def ransac_standard_optimized(model_lines, scene_lines,
                               model_line_indices, scene_line_indices,
                               random_generator, center,
-                              threshold=50):
+                              threshold=40):
 
     # Parameters
-    iterations = 200
+    iterations = 500
     max_inliers = -1
     best_matches = []
     best_error = 99999
@@ -43,6 +43,13 @@ def ransac_standard_optimized(model_lines, scene_lines,
             center)
         # print(transformation)
         # print(np.transpose(transformation[:, 2]))
+
+        # bail-out-test
+        w = np.rad2deg(np.arccos(transformation[0][0,0]))
+        t = np.sum(np.abs(transformation[1:3]))
+        if t > 100 or w > 60:
+            continue
+
 
         # batch transformation
         model_lines_transformed = transform_line_batch(model_lines,
@@ -77,7 +84,10 @@ def ransac_standard_optimized(model_lines, scene_lines,
 
     # return
     print("found max " + str(max_inliers) + " inliers")
-    return best_matches, best_transformation
+    if best_transformation:
+        return best_matches, best_transformation
+    else:
+        return [], transformation
 
 
 if __name__ == "__main__":
