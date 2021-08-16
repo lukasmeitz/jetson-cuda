@@ -219,7 +219,6 @@ def define_transformation(model_line_pair, scene_line_pair, center_point):
             scene_line_pair[0, 3] - scene_line_pair[0, 1]])
     sl1 = sl1 / np.linalg.norm(sl1)
     w1 = calc_angle(ml1, sl1)
-    print(w1)
 
     ml2 = np.array([model_line_pair[1, 2] - model_line_pair[1, 0],
            model_line_pair[1, 3] - model_line_pair[1, 1]])
@@ -228,7 +227,6 @@ def define_transformation(model_line_pair, scene_line_pair, center_point):
             scene_line_pair[1, 3] - scene_line_pair[1, 1]])
     sl2 = sl2 / np.linalg.norm(sl2)
     w2 = calc_angle(ml2, sl2)
-    print(w2)
 
     w =  (w1 + w2) / 2 # beware the negative sign! i removed it
 

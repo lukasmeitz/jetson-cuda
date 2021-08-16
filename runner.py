@@ -55,7 +55,7 @@ def do_test_run(set_number, algorithm, seed):
 
     rng = np.random.default_rng(seed)
     center = np.array([1280/2, 720/2]) if set_number >= 50 else np.array([256, 256])
-    thresh = 40
+    thresh = 20
     iterations = 1000
 
     '''
