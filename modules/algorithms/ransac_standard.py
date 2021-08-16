@@ -12,11 +12,9 @@ output:     matches         - vector of tuples [(FeatureIndexLeft, FeatureIndexR
 
 '''
 
-def ransac_standard(model_lines, scene_lines, random_generator, center_point):
+def ransac_standard(model_lines, scene_lines, random_generator, center_point, ransac_threshold=40, ransac_iterations=500):
 
     # Ransac parameters
-    ransac_iterations = 500  # number of iterations
-    ransac_threshold = 40  # threshold
     current_best_inliers = 0
 
     # generate random value vector (uniform sampled)

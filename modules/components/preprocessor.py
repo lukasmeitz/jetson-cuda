@@ -73,8 +73,8 @@ def take_longest(lines, max_lines=50):
 
 def preprocess_length(lines, max_lines=60, debug=False):
 
-    print("sample line: ")
-    print(lines[0])
+    #print("sample line: ")
+    #print(lines[0])
 
     sorted_lines = take_longest(lines, max_lines=len(lines))
 

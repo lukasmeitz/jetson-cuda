@@ -1,6 +1,8 @@
+import math
 
 import numpy as np
 import cv2
+from numba import cuda
 
 from modules.optimized.optimized_math import transform_line_batch
 
@@ -217,6 +219,7 @@ def define_transformation(model_line_pair, scene_line_pair, center_point):
             scene_line_pair[0, 3] - scene_line_pair[0, 1]])
     sl1 = sl1 / np.linalg.norm(sl1)
     w1 = calc_angle(ml1, sl1)
+    print(w1)
 
     ml2 = np.array([model_line_pair[1, 2] - model_line_pair[1, 0],
            model_line_pair[1, 3] - model_line_pair[1, 1]])
@@ -225,6 +228,7 @@ def define_transformation(model_line_pair, scene_line_pair, center_point):
             scene_line_pair[1, 3] - scene_line_pair[1, 1]])
     sl2 = sl2 / np.linalg.norm(sl2)
     w2 = calc_angle(ml2, sl2)
+    print(w2)
 
     w =  (w1 + w2) / 2 # beware the negative sign! i removed it
 
@@ -259,6 +263,98 @@ def define_transformation(model_line_pair, scene_line_pair, center_point):
         scale_factor = 1  # there is no reasonable factor to calculate at this point
 
     return [get_rotation_matrix_2d(w), t[0], t[1], scale_factor, scale_center]
+
+
+
+
+
+@cuda.jit
+def get_transformation_cuda(model_lines, scene_lines, indices, transformations):
+
+    x = cuda.grid(1)
+
+    if x < indices.shape[0]:
+        # line layout: line = [p1x, p1y, p2x, p2y]
+
+        # first and second model line
+        ml1 = model_lines[indices[x][0]]
+        ml2 = model_lines[indices[x][1]]
+
+        # first and second scene line
+        sl1 = scene_lines[indices[x][2]]
+        sl2 = scene_lines[indices[x][3]]
+
+        # calculate angle between lines 1
+        length_ml1 = math.sqrt(((ml1[3] - ml1[1]) ** 2) + ((ml1[2] - ml1[0]) ** 2))
+        ml1x_norm = (ml1[2] - ml1[0]) / length_ml1
+        ml1y_norm = (ml1[3] - ml1[1]) / length_ml1
+
+        length_sl1 = math.sqrt(((sl1[2] - sl1[0]) ** 2) + ((sl1[3] - sl1[1]) ** 2))
+        sl1x_norm = (sl1[2] - sl1[0]) / length_sl1
+        sl1y_norm = (sl1[3] - sl1[1]) / length_sl1
+
+        cos_1 = ml1x_norm * sl1x_norm + ml1y_norm * sl1y_norm
+        cos_2 = -ml1y_norm * sl1x_norm + ml1x_norm * sl1y_norm
+        winkel_radians = math.acos(min(math.fabs(cos_1), 1))
+        w1 = math.degrees(winkel_radians)
+
+        if cos_1 * cos_2 < 0:
+            w1 = -w1
+
+        # calculate angle between lines 2
+        length_ml2 = math.sqrt(((ml2[2] - ml2[0]) ** 2) + ((ml2[3] - ml2[1]) ** 2))
+        ml2x_norm = (ml2[2] - ml2[0]) / length_ml2
+        ml2y_norm = (ml2[3] - ml2[1]) / length_ml2
+
+        length_sl2 = math.sqrt(((sl2[2] - sl2[0]) ** 2) + ((sl2[3] - sl2[1]) ** 2))
+        sl2x_norm = (sl2[2] - sl2[0]) / length_sl2
+        sl2y_norm = (sl2[3] - sl2[1]) / length_sl2
+
+        cos_1 = ml2x_norm * sl2x_norm + ml2y_norm * sl2y_norm
+        cos_2 = -ml2y_norm * sl2x_norm + ml2x_norm * sl2y_norm
+        winkel_radians = math.acos(min(math.fabs(cos_1), 1))
+        w2 = math.degrees(winkel_radians)
+
+        if cos_1 * cos_2 < 0:
+            w2 = -w2
+        # define rotation
+        rotation = (w1 + w2) / 2
+
+        # calculate a rotation matrix
+        rot_00 = math.cos(math.radians(rotation))
+        rot_01 = -math.sin(math.radians(rotation))
+        rot_10 = math.sin(math.radians(rotation))
+        rot_11 = math.cos(math.radians(rotation))
+
+
+        ml1x1_t = ml1[0] * rot_00 + ml1[1] * rot_01
+        ml1y1_t = ml1[0] * rot_10 + ml1[1] * rot_11
+        ml1x2_t = ml1[2] * rot_00 + ml1[3] * rot_01
+        ml1y2_t = ml1[2] * rot_10 + ml1[3] * rot_11
+
+        ml2x1_t = ml2[0] * rot_00 + ml2[1] * rot_01
+        ml2y1_t = ml2[0] * rot_10 + ml2[1] * rot_11
+        ml2x2_t = ml2[2] * rot_00 + ml2[3] * rot_01
+        ml2y2_t = ml2[2] * rot_10 + ml2[3] * rot_11
+
+        # calculate center of gravity
+        centerx_ml = (ml1x1_t + ml1x2_t + ml2x1_t + ml2x2_t) / 4
+        centerx_sl = (sl1[0] + sl1[2] + sl2[0] + sl2[2]) / 4
+
+        centery_ml = (ml1y1_t + ml1y2_t + ml2y1_t + ml2y2_t) / 4
+        centery_sl = (sl1[1] + sl1[3] + sl2[1] + sl2[3]) / 4
+
+        # define translation
+        translation_x = centerx_sl - centerx_ml
+        translation_y = centery_sl - centery_ml
+
+        # write result
+        transformations[x, 0] = rotation < 30 and math.fabs(translation_x) + math.fabs(translation_y) < 150
+        transformations[x, 1] = rotation
+        transformations[x, 2] = translation_x
+        transformations[x, 3] = translation_y
+
+
 
 
 def get_rotation_matrix_2d(rotation_angle):
