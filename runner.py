@@ -219,7 +219,7 @@ def do_test_run(set_number, algorithm):
 
     # show to screen, block for user input
     if not meta["system"] == "Jetson Board":
-         plot_image(blank_image, "test set " + str(meta["test_set_number"]), False)
+         plot_image(blank_image, "test set " + str(meta["test_set_number"]), True)
 
 
 
@@ -236,7 +236,7 @@ if __name__ == "__main__":
     # "standard" "cuda" "first" "simple" "pairwise"
     algorithm_list = ["standard"]
     #2,  25, 30, 35, 40, 45, 50,
-    test_list = [2, 6, 11, 16, 21, 26, 31, 36, 41, 46, 52, 65, 66, 67, 68, 69, 70, 71, 72]
+    test_list = [2, 6, 7, 8, 9, 10, 11, 12, 16, 21, 26, 31, 36, 41, 46, 52, 65, 66, 67, 68, 69, 70, 71, 72]
 
     for test_num in test_list:
 
