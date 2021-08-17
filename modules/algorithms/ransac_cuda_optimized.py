@@ -85,14 +85,11 @@ def count_inlier_error(a, b):
     return a + b
 
 
-def ransac_cuda_optimized(model_lines, scene_lines,
-                          model_line_indices, scene_line_indices,
+def ransac_cuda_optimized(model_lines,
+                          scene_lines,
                           random_generator, center,
                           threshold=40,
                           iterations=500):
-
-    # debug info
-    #print("max combinations for evaluation: " + str(len(model_lines) * len(scene_lines)))
 
     # Parameters
     max_inliers = 0
@@ -101,24 +98,20 @@ def ransac_cuda_optimized(model_lines, scene_lines,
     best_matches = []
 
     # generate samples
-    random_sample_indices = random_generator.random((iterations, 2))
-    random_sample_indices *= [len(model_line_indices)-1, len(scene_line_indices)-1]
+    random_sample_indices = random_generator.random((iterations, 4))
+    random_sample_indices *= [len(model_lines)-1, len(model_lines)-1,
+                              len(scene_lines)-1, len(scene_lines)-1]
     random_sample_indices = np.round(random_sample_indices).astype(int)
 
     # loop through
     for i in range(iterations):
 
-        # resolve index
-        # print("picking " + str(random_sample_indices[i]))
-        model_pair_index = model_line_indices[random_sample_indices[i][0]]
-        scene_pair_index = scene_line_indices[random_sample_indices[i][1]]
-
         # define transform
         transformation = define_transformation(
-            np.array([model_lines[int(model_pair_index[0])],
-                      model_lines[int(model_pair_index[1])]]),
-            np.array([scene_lines[int(scene_pair_index[0])],
-                      scene_lines[int(scene_pair_index[1])]]),
+            np.array([model_lines[int(random_sample_indices[i][0])],
+                      model_lines[int(random_sample_indices[i][1])]]),
+            np.array([scene_lines[int(random_sample_indices[i][2])],
+                      scene_lines[int(random_sample_indices[i][3])]]),
             center)
 
         # bail-out-test
@@ -163,7 +156,7 @@ def ransac_cuda_optimized(model_lines, scene_lines,
                 if r < threshold:
                     m = c % len(model_lines)
                     s = np.floor(c / len(model_lines))
-                    best_matches.append((int(m), int(s)))
+                    best_matches.append((model_lines[int(m)][6], scene_lines[int(s)][6]))
                     max_inliers += 1
 
                 c += 1

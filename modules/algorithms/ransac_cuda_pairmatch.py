@@ -58,7 +58,7 @@ def evaluate_line_batch(lines, reference_lines, scores, inliers, threshold):
 
 
 @cuda.jit
-def take_pairs(model_lines, scene_lines, results, threshold):
+def take_pairs(model_lines, scene_lines, results):
 
     m, s = cuda.grid(2)
 
@@ -72,9 +72,13 @@ def take_pairs(model_lines, scene_lines, results, threshold):
         # angle
         vec_ml1 = model_lines[m][2] - model_lines[m][0]
         vec_ml2 = model_lines[m][3] - model_lines[m][1]
+        vec_ml1 /= len_ml
+        vec_ml2 /= len_ml
 
         vec_sl1 = scene_lines[m][2] - scene_lines[m][0]
         vec_sl2 = scene_lines[m][3] - scene_lines[m][1]
+        vec_sl1 /= len_sl
+        vec_sl2 /= len_sl
 
         cos_1 = vec_ml1 * vec_sl1 + vec_ml2 * vec_sl2
         cos_2 = -vec_ml2 * vec_sl1 + vec_ml1 * vec_sl2
@@ -82,6 +86,12 @@ def take_pairs(model_lines, scene_lines, results, threshold):
 
         if cos_1 * cos_2 < 0:
             angle = -angle
+
+        if angle < -45:
+            angle += 90
+
+        if angle > 45:
+            angle -= 90
 
         # distance midpoints
         mid_ml1 = vec_ml1 / 2 + model_lines[m][0]
@@ -94,7 +104,7 @@ def take_pairs(model_lines, scene_lines, results, threshold):
             (mid_ml1 - mid_sl1) ** 2
             + (mid_ml2 - mid_sl2) ** 2)
 
-        if mid_dist < threshold and angle < 30 and len_diff < 500:
+        if mid_dist < 500 and angle < 20 and len_diff < 100:
             results[((model_lines.shape[0]) * s) + m] = 1
 
 
@@ -125,6 +135,94 @@ def transform_line_batch(lines, rotation, transformation_distance, center_point)
         lines[x, 3] += center_point[1] + transformation_distance[1]
 
 
+@cuda.jit
+def get_transformation_cuda(model_lines, scene_lines, indices, transformations):
+
+    x = cuda.grid(1)
+
+    if x < indices.shape[0]:
+        # line layout: line = [p1x, p1y, p2x, p2y]
+
+        # first and second model line
+        ml1 = model_lines[indices[x][0]]
+        ml2 = model_lines[indices[x][1]]
+
+        # first and second scene line
+        sl1 = scene_lines[indices[x][2]]
+        sl2 = scene_lines[indices[x][3]]
+
+        # calculate angle between lines 1
+        length_ml1 = math.sqrt(((ml1[3] - ml1[1]) ** 2) + ((ml1[2] - ml1[0]) ** 2))
+        ml1x_norm = (ml1[2] - ml1[0]) / length_ml1
+        ml1y_norm = (ml1[3] - ml1[1]) / length_ml1
+
+        length_sl1 = math.sqrt(((sl1[2] - sl1[0]) ** 2) + ((sl1[3] - sl1[1]) ** 2))
+        sl1x_norm = (sl1[2] - sl1[0]) / length_sl1
+        sl1y_norm = (sl1[3] - sl1[1]) / length_sl1
+
+        cos_1 = ml1x_norm * sl1x_norm + ml1y_norm * sl1y_norm
+        cos_2 = -ml1y_norm * sl1x_norm + ml1x_norm * sl1y_norm
+        winkel_radians = math.acos(min(math.fabs(cos_1), 1))
+        w1 = math.degrees(winkel_radians)
+
+        if cos_1 * cos_2 < 0:
+            w1 = -w1
+
+        # calculate angle between lines 2
+        length_ml2 = math.sqrt(((ml2[2] - ml2[0]) ** 2) + ((ml2[3] - ml2[1]) ** 2))
+        ml2x_norm = (ml2[2] - ml2[0]) / length_ml2
+        ml2y_norm = (ml2[3] - ml2[1]) / length_ml2
+
+        length_sl2 = math.sqrt(((sl2[2] - sl2[0]) ** 2) + ((sl2[3] - sl2[1]) ** 2))
+        sl2x_norm = (sl2[2] - sl2[0]) / length_sl2
+        sl2y_norm = (sl2[3] - sl2[1]) / length_sl2
+
+        cos_1 = ml2x_norm * sl2x_norm + ml2y_norm * sl2y_norm
+        cos_2 = -ml2y_norm * sl2x_norm + ml2x_norm * sl2y_norm
+        winkel_radians = math.acos(min(math.fabs(cos_1), 1))
+        w2 = math.degrees(winkel_radians)
+
+        if cos_1 * cos_2 < 0:
+            w2 = -w2
+        # define rotation
+        rotation = (w1 + w2) / 2
+
+        # calculate a rotation matrix
+        rot_00 = math.cos(math.radians(rotation))
+        rot_01 = -math.sin(math.radians(rotation))
+        rot_10 = math.sin(math.radians(rotation))
+        rot_11 = math.cos(math.radians(rotation))
+
+        ml1x1_t = ml1[0] * rot_00 + ml1[1] * rot_01
+        ml1y1_t = ml1[0] * rot_10 + ml1[1] * rot_11
+        ml1x2_t = ml1[2] * rot_00 + ml1[3] * rot_01
+        ml1y2_t = ml1[2] * rot_10 + ml1[3] * rot_11
+
+        ml2x1_t = ml2[0] * rot_00 + ml2[1] * rot_01
+        ml2y1_t = ml2[0] * rot_10 + ml2[1] * rot_11
+        ml2x2_t = ml2[2] * rot_00 + ml2[3] * rot_01
+        ml2y2_t = ml2[2] * rot_10 + ml2[3] * rot_11
+
+        # calculate center of gravity
+        centerx_ml = (ml1x1_t + ml1x2_t + ml2x1_t + ml2x2_t) / 4
+        centerx_sl = (sl1[0] + sl1[2] + sl2[0] + sl2[2]) / 4
+
+        centery_ml = (ml1y1_t + ml1y2_t + ml2y1_t + ml2y2_t) / 4
+        centery_sl = (sl1[1] + sl1[3] + sl2[1] + sl2[3]) / 4
+
+        # define translation
+        translation_x = centerx_sl - centerx_ml
+        translation_y = centery_sl - centery_ml
+
+        # write result
+        transformations[x, 0] = rotation < 30 and math.fabs(translation_x) + math.fabs(translation_y) < 150
+        transformations[x, 1] = rotation
+        transformations[x, 2] = translation_x
+        transformations[x, 3] = translation_y
+
+
+
+
 @cuda.reduce
 def count_inlier_error(a, b):
     return a + b
@@ -142,15 +240,14 @@ def map_inlier_bool(result_matrix, threshold):
             result_matrix[x] = 0
 
 
-def ransac_cuda_pairmatch(model_lines, scene_lines,
-                          random_generator, center,
-                          threshold=40):
-
-    # debug info
-    print("max combinations for evaluation: " + str(len(model_lines) * len(scene_lines)))
+def ransac_cuda_pairmatch(model_lines,
+                          scene_lines,
+                          random_generator,
+                          center,
+                          threshold=40,
+                          iterations=500):
 
     # Parameters
-    iterations = 2000
     best_inliers = 0
     best_error = 99999999
     best_transformation = []
@@ -164,8 +261,7 @@ def ransac_cuda_pairmatch(model_lines, scene_lines,
     blockspergrid = (blockspergrid_x, blockspergrid_y)
     take_pairs[blockspergrid, threadsperblock](model_lines,
                                                scene_lines,
-                                               match_pairs,
-                                               150)
+                                               match_pairs)
 
     pairs = []
     for n, mp in enumerate(match_pairs):
@@ -173,40 +269,35 @@ def ransac_cuda_pairmatch(model_lines, scene_lines,
         s = np.floor(n / len(model_lines))
         pairs.append([m, s])
     pairs = np.array(pairs).astype(int)
-    print("found " + str(count_inlier_error(match_pairs)) + " pairs in simple preprocessing")
-    print(match_pairs)
-    print()
+    print("found " + str(count_inlier_error(match_pairs)) + " pairs in pair preprocessing")
 
     # generate samples
     random_sample_indices = random_generator.random((iterations, 2))
     random_sample_indices *= [len(pairs)-1, len(pairs)-1]
     random_sample_indices = np.round(random_sample_indices).astype(int)
 
+    # indices = [[ml1, ml2, sl1, sl2], ... ]
+    indices = []
+    for p1, p2 in random_sample_indices:
+        indices.append([pairs[p1][0],
+                        pairs[p2][1],
+                        pairs[p1][0],
+                        pairs[p2][1]])
+    indices = np.array(indices)
+    transformations = np.zeros((len(indices), 4))
+
+    # build hypotheses
+    threadsperblock = (16, 16)
+    blockspergrid_x = np.math.ceil(len(indices) / threadsperblock[0])
+    blockspergrid_y = np.math.ceil(len(scene_lines) / threadsperblock[1])
+    blockspergrid = (blockspergrid_x, blockspergrid_y)
+
+    get_transformation_cuda[blockspergrid, threadsperblock](model_lines, scene_lines, indices, transformations)
+
     # loop through
     for i in range(iterations):
 
-        # resolve index
-        current_sample_indices = random_sample_indices[i]
-
-        first_pair_indices = pairs[current_sample_indices[0]]
-        second_pair_indices = pairs[current_sample_indices[1]]
-
-        ml1 = model_lines[first_pair_indices[0]]
-        sl1 = scene_lines[first_pair_indices[1]]
-
-        ml2 = model_lines[second_pair_indices[0]]
-        sl2 = scene_lines[second_pair_indices[1]]
-
-        # define transform
-        transformation = define_transformation(
-            np.array([ml1, ml2]),
-            np.array([sl1, sl2]),
-            center)
-
-        # bail-out-test
-        w = np.rad2deg(np.arccos(transformation[0][0, 0]))
-        t = np.sum(np.abs(transformation[1:3]))
-        if t > 100 or w > 30:
+        if not transformations[i][0]:
             continue
 
         # batch transformation
@@ -215,9 +306,15 @@ def ransac_cuda_pairmatch(model_lines, scene_lines,
         blockspergrid_x = np.math.ceil(model_lines.shape[0] / threadsperblock[0])
         blockspergrid_y = np.math.ceil(model_lines.shape[1] / threadsperblock[1])
         blockspergrid = (blockspergrid_x, blockspergrid_y)
+
+        rotation_matrix = np.array(((np.cos(np.radians(transformations[i][1])),
+                                    -np.sin(np.radians(transformations[i][1]))),
+                                    (np.sin(np.radians(transformations[i][1])),
+                                     np.cos(np.radians(transformations[i][1])))))
         transform_line_batch[blockspergrid, threadsperblock](model_lines_transformed,
-                                                             np.array(transformation[0]),
-                                                             np.array(transformation[1:3]),
+                                                             rotation_matrix,
+                                                             np.array([transformations[i][2],
+                                                                      transformations[i][2]]),
                                                              center)
 
         # evaluation
@@ -238,7 +335,7 @@ def ransac_cuda_pairmatch(model_lines, scene_lines,
         if inliers_cuda > best_inliers and error_cuda < best_error:
             best_inliers = inliers_cuda
             best_error = error_cuda
-            best_transformation = transformation
+            best_transformation = transformations[i]
             best_matches.clear()
 
             for n, r in enumerate(inliers):
@@ -249,6 +346,8 @@ def ransac_cuda_pairmatch(model_lines, scene_lines,
                     best_matches.append((int(model_lines[int(m)][6]), int(scene_lines[int(s)][6])))
 
             print("found " + str(best_inliers) + " inliers")
+
+
 
     return best_matches, best_transformation
 

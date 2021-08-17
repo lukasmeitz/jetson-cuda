@@ -44,6 +44,7 @@ def load_test_set(n, path, demo=False):
 
     return scene_lines, model_lines, match_ids
 
+
 @cuda.jit
 def get_transformation_cuda(model_lines, scene_lines, indices, transformations):
 
@@ -101,7 +102,6 @@ def get_transformation_cuda(model_lines, scene_lines, indices, transformations):
         rot_01 = -math.sin(math.radians(rotation))
         rot_10 = math.sin(math.radians(rotation))
         rot_11 = math.cos(math.radians(rotation))
-
 
         ml1x1_t = ml1[0] * rot_00 + ml1[1] * rot_01
         ml1y1_t = ml1[0] * rot_10 + ml1[1] * rot_11

@@ -3,7 +3,8 @@ import numpy as np
 import math
 from numba import cuda
 
-from modules.components.evaluation import calc_min_distance, calc_advanced_cross_distance
+from modules.algorithms.preprocessing import filter_lines
+from modules.components.evaluation import calc_min_distance, calc_advanced_cross_distance, calc_angle
 from modules.components.transformation import calc_distance
 from modules.handlers.load_test_sets import load_test_set
 from itertools import combinations
@@ -73,13 +74,7 @@ def take_longest(lines, max_lines=50):
 
 def preprocess_length(lines, max_lines=60, debug=False):
 
-    #print("sample line: ")
-    #print(lines[0])
-
-    sorted_lines = take_longest(lines, max_lines=len(lines))
-
-    #sorted_lines = lines[lines[:, 5].argsort()]
-    #return sorted_lines[:max_lines]
+    sorted_lines = take_longest(lines, max_lines)
 
     # binning
     first = []
@@ -98,95 +93,136 @@ def preprocess_length(lines, max_lines=60, debug=False):
             third.append(line)
 
 
-    # culling of bins
-    first = first[:max_lines//3]
-    second = second[:max_lines//3]
-    third = third[:max_lines//3]
-
     if debug:
         print("bin content after sort: " + str(len(first))
           + ", " + str(len(second))
           + ", " + str(len(third)))
+
+    # culling of bins
+    first = first[:max_lines//3]
+    second = second[:max_lines//3]
+    third = third[:max_lines//3]
 
     res = first + second + third
     return res
 
 
-def preprocessor(lines, max_lines=60, local_thresh=50, debug=False):
+def get_midpoint(line):
 
-    # form of input: line = [p1x, p1y, p2x, p2y, mid, angle, len]
-    if debug:
-        print("processing " + str(len(lines)) + " lines")
-        print(lines[0])
+    p1 = line[0:2]
+    p2 = line[2:4]
 
-    # space for return values
+    return ((p2 - p1) / 2) + p1
+
+
+def preprocessor(model_lines, scene_lines):
+
+    #print(model_lines[0])
+
     pair_indices = []
 
-    # sort for length
-    # https://stackoverflow.com/questions/2828059/sorting-arrays-in-numpy-by-column
-    sorted_lines = lines[lines[:, 6].argsort()]
+    for nm, m in enumerate(model_lines):
+        for ns, s in enumerate(scene_lines):
 
-    # binning
-    first = []
-    second = []
-    third = []
-    for line in sorted_lines:
-        ang = line[5]
-        if ang < 0:
-            ang += 180
-        if 0 <= ang <= 60:
-            first.append(line)
-        if 60 < ang <= 120:
-            second.append(line)
-        if 120 < ang:
-            third.append(line)
+            # length
+            len1 = calc_distance(m[0:2], m[2:4])
+            len2 = calc_distance(s[0:2], s[2:4])
+            len_diff = np.abs((len1 - len2))
 
-    if debug:
-        print("bin content after sort: " + str(len(first))
-          + ", " + str(len(second))
-          + ", " + str(len(third)))
+            # angle
+            vec_ml1 = m[2] - m[0]
+            vec_ml2 = m[3] - m[1]
+            len_ml = np.sqrt((vec_ml1) ** 2 + (vec_ml2) ** 2)
+            vec_ml1 /= len_ml
+            vec_ml2 /= len_ml
 
-    # culling of bins
-    first = first[:max_lines//3]
-    second = second[:max_lines//3]
-    third = third[:max_lines//3]
+            vec_sl1 = s[2] - s[0]
+            vec_sl2 = s[3] - s[1]
+            len_sl = np.sqrt((vec_sl1) ** 2 + (vec_sl2) ** 2)
+            vec_sl1 /= len_sl
+            vec_sl2 /= len_sl
 
-    if debug:
-        print("bin content after culling: " + str(len(first))
-          + ", " + str(len(second))
-          + ", " + str(len(third)))
+            cos_1 = vec_ml1 * vec_sl1 + vec_ml2 * vec_sl2
+            cos_2 = -vec_ml2 * vec_sl1 + vec_ml1 * vec_sl2
+            angle = math.degrees(math.acos(min(abs(cos_1), 1)))
 
-    # combination of lines
-    for f in first:
-        for s in second:
-            if calc_advanced_cross_distance(f, s) < local_thresh:
-                pair_indices.append([f[6], s[6]])
-                break
+            if cos_1 * cos_2 < 0:
+                angle = -angle
 
-    for f in first:
-        for t in third:
-            if calc_advanced_cross_distance(f, t) < local_thresh:
-                pair_indices.append([f[6], t[6]])
-                break
+            if angle < -45:
+                angle += 90
 
-    for s in second:
-        for t in third:
-            if calc_advanced_cross_distance(s, t) < local_thresh:
-                pair_indices.append([s[6], t[6]])
-                break
+            if angle > 45:
+                angle -= 90
 
-    if len(pair_indices) < 10:
-        pair_indices = list(combinations(range(len(lines)), 2))
-        pass
+            # distance midpoints
+            mid_mx = vec_ml1 / 2 + m[0]
+            mid_my = vec_ml2 / 2 + m[1]
+            mid_sx = vec_sl1 / 2 + s[0]
+            mid_sy = vec_sl2 / 2 + s[1]
 
-    if debug:
-        print("found " + str(len(pair_indices)) + " pairs")
-        print(pair_indices)
+            mid_dist = math.sqrt(
+                (mid_sx - mid_mx) ** 2
+                + (mid_sy - mid_my) ** 2)
 
-    return pair_indices
+            if s[6] == m[6] and False:
+                print("correct match with angle, mid_dist, len_dif: ")
+                print(angle)
+                print(mid_dist)
+                print(len_diff)
+                print()
+
+            if abs(angle) < 20 and mid_dist < 100 and len_diff < 100:
+                pair_indices.append([nm, ns])
+
+    return np.array(pair_indices).astype(int)
 
 
 if __name__ == "__main__":
 
-    scene_lines, model_lines, match_id_list = load_test_set(72, "../../")
-    preprocessor(scene_lines)
+    # load data
+    scene_lines, model_lines, match_id_list = load_test_set(70, "../../")
+
+    print("max combinations before culling: " + str(len(model_lines) * len(scene_lines)))
+    c = 0
+    for m in model_lines:
+        for s in scene_lines:
+            if m[6] == s[6]:
+                c += 1
+    print("possible matches: " + str(c))
+
+    # filter length
+    scene_lines_lengthfiltered = filter_lines(scene_lines, max_lines=120)
+    model_lines_lengthfiltered = filter_lines(model_lines, max_lines=120)
+
+    print("max combinations after length filter: " + str(len(model_lines_lengthfiltered) * len(scene_lines_lengthfiltered)))
+    c = 0
+    for m in model_lines_lengthfiltered:
+        for s in scene_lines_lengthfiltered:
+            if m[6] == s[6]:
+                c += 1
+    print("possible matches after length filter: " + str(c))
+
+    #
+    # culling
+    scene_lines = preprocess_length(scene_lines, max_lines=300)
+    model_lines = preprocess_length(model_lines, max_lines=300)
+
+    print("max combinations after culling: " + str(len(model_lines) * len(scene_lines)))
+    c = 0
+    for m in model_lines:
+        for s in scene_lines:
+            if m[6] == s[6]:
+                c += 1
+    print("possible matches after culling: " + str(c))
+
+    #
+    # pair matching
+    pair_indices = preprocessor(model_lines_lengthfiltered, scene_lines_lengthfiltered)
+    print("matched combinations: " + str(len(pair_indices)))
+
+    c = 0
+    for m, s in pair_indices:
+        if m == s:
+            c += 1
+    print("correct matches: " + str(c))
