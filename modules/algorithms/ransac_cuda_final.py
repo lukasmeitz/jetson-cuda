@@ -1,17 +1,135 @@
 
 import math
-from functools import reduce
-
+import scipy.io
 import numpy as np
 
 from numba import cuda
 
-from modules.components import transformation
-from modules.components.evaluation import calc_min_distance
-from modules.components.preprocessor import preprocessor, preprocess_length
-from modules.components.transformation import define_transformation, get_transformation_cuda
-from modules.handlers.load_test_sets import load_test_set
-from modules.optimized import optimized_math
+
+
+def load_test_set(n, path, demo=False):
+
+    # load the file
+    test_set_number = "{:03d}".format(n)
+    if not demo:
+        test_set_data = scipy.io.loadmat(path + 'data/TestSets/TestSet' + test_set_number + '/TestSet' + test_set_number + '.mat')
+    else:
+        test_set_data = scipy.io.loadmat(
+        path + 'data/TestSets_Demonstrator/TestSet' + test_set_number + '/TestSet' + test_set_number + '.mat')
+
+    #print(test_set_data)
+
+    # save the sceneline array
+    # fields of one vector: p1, p2, vec, mid, len, ang
+    scene_lines = test_set_data['Results_t']['Scenelines'][0][:][0][0]
+
+    # save the modelline array
+    # fields of one vector: p1, p2, vec, mid, len, ang
+    model_lines = test_set_data['Results_t']['Modellines_err'][0][:][0][0]
+
+    # get rid of unnecessary data
+    scene_lines = [[p1[0][0], p1[1][0], p2[0][0], p2[1][0], ang[0][0], len[0][0], mid] for p1, p2, vec, mid, len, ang in scene_lines]
+    model_lines = [[p1[0][0], p1[1][0], p2[0][0], p2[1][0], ang[0][0], len[0][0], mid] for p1, p2, vec, _, len, ang, _, mid, _, _, _ in model_lines]
+
+    # give ids to lines
+    scene_lines = [[line[0], line[1], line[2], line[3], line[4], line[5], int(num)] for num, line in enumerate(scene_lines)]
+    model_lines = [[line[0], line[1], line[2], line[3], line[4], line[5], int(num)] for num, line in enumerate(model_lines)]
+
+    # create numpy array
+    scene_lines = np.array(scene_lines)
+    model_lines = np.array(model_lines)
+
+    # save the test set meta data
+    match_ids = test_set_data['matchingOutput']['Matches'][0][:][0][0]
+
+    return scene_lines, model_lines, match_ids
+
+@cuda.jit
+def get_transformation_cuda(model_lines, scene_lines, indices, transformations):
+
+    x = cuda.grid(1)
+
+    if x < indices.shape[0]:
+        # line layout: line = [p1x, p1y, p2x, p2y]
+
+        # first and second model line
+        ml1 = model_lines[indices[x][0]]
+        ml2 = model_lines[indices[x][1]]
+
+        # first and second scene line
+        sl1 = scene_lines[indices[x][2]]
+        sl2 = scene_lines[indices[x][3]]
+
+        # calculate angle between lines 1
+        length_ml1 = math.sqrt(((ml1[3] - ml1[1]) ** 2) + ((ml1[2] - ml1[0]) ** 2))
+        ml1x_norm = (ml1[2] - ml1[0]) / length_ml1
+        ml1y_norm = (ml1[3] - ml1[1]) / length_ml1
+
+        length_sl1 = math.sqrt(((sl1[2] - sl1[0]) ** 2) + ((sl1[3] - sl1[1]) ** 2))
+        sl1x_norm = (sl1[2] - sl1[0]) / length_sl1
+        sl1y_norm = (sl1[3] - sl1[1]) / length_sl1
+
+        cos_1 = ml1x_norm * sl1x_norm + ml1y_norm * sl1y_norm
+        cos_2 = -ml1y_norm * sl1x_norm + ml1x_norm * sl1y_norm
+        winkel_radians = math.acos(min(math.fabs(cos_1), 1))
+        w1 = math.degrees(winkel_radians)
+
+        if cos_1 * cos_2 < 0:
+            w1 = -w1
+
+        # calculate angle between lines 2
+        length_ml2 = math.sqrt(((ml2[2] - ml2[0]) ** 2) + ((ml2[3] - ml2[1]) ** 2))
+        ml2x_norm = (ml2[2] - ml2[0]) / length_ml2
+        ml2y_norm = (ml2[3] - ml2[1]) / length_ml2
+
+        length_sl2 = math.sqrt(((sl2[2] - sl2[0]) ** 2) + ((sl2[3] - sl2[1]) ** 2))
+        sl2x_norm = (sl2[2] - sl2[0]) / length_sl2
+        sl2y_norm = (sl2[3] - sl2[1]) / length_sl2
+
+        cos_1 = ml2x_norm * sl2x_norm + ml2y_norm * sl2y_norm
+        cos_2 = -ml2y_norm * sl2x_norm + ml2x_norm * sl2y_norm
+        winkel_radians = math.acos(min(math.fabs(cos_1), 1))
+        w2 = math.degrees(winkel_radians)
+
+        if cos_1 * cos_2 < 0:
+            w2 = -w2
+        # define rotation
+        rotation = (w1 + w2) / 2
+
+        # calculate a rotation matrix
+        rot_00 = math.cos(math.radians(rotation))
+        rot_01 = -math.sin(math.radians(rotation))
+        rot_10 = math.sin(math.radians(rotation))
+        rot_11 = math.cos(math.radians(rotation))
+
+
+        ml1x1_t = ml1[0] * rot_00 + ml1[1] * rot_01
+        ml1y1_t = ml1[0] * rot_10 + ml1[1] * rot_11
+        ml1x2_t = ml1[2] * rot_00 + ml1[3] * rot_01
+        ml1y2_t = ml1[2] * rot_10 + ml1[3] * rot_11
+
+        ml2x1_t = ml2[0] * rot_00 + ml2[1] * rot_01
+        ml2y1_t = ml2[0] * rot_10 + ml2[1] * rot_11
+        ml2x2_t = ml2[2] * rot_00 + ml2[3] * rot_01
+        ml2y2_t = ml2[2] * rot_10 + ml2[3] * rot_11
+
+        # calculate center of gravity
+        centerx_ml = (ml1x1_t + ml1x2_t + ml2x1_t + ml2x2_t) / 4
+        centerx_sl = (sl1[0] + sl1[2] + sl2[0] + sl2[2]) / 4
+
+        centery_ml = (ml1y1_t + ml1y2_t + ml2y1_t + ml2y2_t) / 4
+        centery_sl = (sl1[1] + sl1[3] + sl2[1] + sl2[3]) / 4
+
+        # define translation
+        translation_x = centerx_sl - centerx_ml
+        translation_y = centery_sl - centery_ml
+
+        # write result
+        transformations[x, 0] = rotation < 30 and math.fabs(translation_x) + math.fabs(translation_y) < 150
+        transformations[x, 1] = rotation
+        transformations[x, 2] = translation_x
+        transformations[x, 3] = translation_y
+
 
 
 @cuda.jit
@@ -165,7 +283,8 @@ def ransac_cuda_final(model_lines,
                 if r < threshold:
                     m = c % len(model_lines)
                     s = np.floor(c / len(model_lines))
-                    best_matches.append((int(m), int(s)))
+                    best_matches.append((int(model_lines[int(m)][6]),
+                                         int(scene_lines[int(s)][6])))
                     max_inliers += 1
 
                 c += 1
@@ -190,8 +309,6 @@ if __name__ == "__main__":
     model_lines = np.array(model_lines)
     scene_lines = np.array(scene_lines)
 
-    print(model_lines[0])
-    print(scene_lines[0])
 
     # sample
     matches, transform = ransac_cuda_final(model_lines,

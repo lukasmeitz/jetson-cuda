@@ -55,7 +55,7 @@ def do_test_run(set_number, algorithm, seed):
 
     rng = np.random.default_rng(seed)
     center = np.array([1280/2, 720/2]) if set_number >= 50 else np.array([256, 256])
-    thresh = 20
+    thresh = 40
     iterations = 1000
 
     '''
@@ -120,9 +120,11 @@ def do_test_run(set_number, algorithm, seed):
     elif meta["ransac_type"] == "final":
         start_time = time.time()
 
-        scene_line_pairs = preprocess_length(scene_lines, max_lines=120)
-        model_line_pairs = preprocess_length(model_lines, max_lines=120)
-        matching_correspondence, transformation_2d = ransac_cuda_final(model_lines, scene_lines,
+        scene_lines_filtered = preprocess_length(scene_lines, max_lines=60)
+        model_lines_filtered = preprocess_length(model_lines, max_lines=60)
+        scene_lines_filtered = np.array(scene_lines_filtered)
+        model_lines_filtered = np.array(model_lines_filtered)
+        matching_correspondence, transformation_2d = ransac_cuda_final(model_lines_filtered, scene_lines_filtered,
                                                                            rng, center,
                                                                            threshold=thresh,
                                                                            iterations=iterations)
@@ -235,7 +237,7 @@ def do_test_run(set_number, algorithm, seed):
 
     # show to screen, block for user input
     if not meta["system"] == "Jetson Board":
-         plot_image(blank_image, "test set " + str(meta["test_set_number"]), False)
+         plot_image(blank_image, "test set " + str(meta["test_set_number"]), True)
 
 
 
@@ -250,8 +252,9 @@ def get_midpoint(line):
 if __name__ == "__main__":
 
     # "standard" "cuda" "first" "simple" "pairwise" "final"
-    algorithm_list = ["first", "standard", "cuda", "final"]
+    algorithm_list = ["final"]
 
+    #test_list = [2, 50, 5, 10, 12, 22, 24, 25, 37, 51, 53, 62, 67]
     test_list = [2, 50, 5, 10, 12, 22, 24, 25, 37, 51, 53, 62, 67]
 
     for test_num in test_list:

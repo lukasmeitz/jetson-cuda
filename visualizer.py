@@ -1,7 +1,6 @@
 from modules.handlers.load_result_files import collect_file_list, read_dict_data
 import matplotlib.pyplot as plt
-
-from modules.visuals.result_plotting import compute_correct_matches
+import numpy as np
 
 if __name__ == "__main__":
 
@@ -10,44 +9,64 @@ if __name__ == "__main__":
 
     print("read " + str(len(data)) + " test set results")
 
-    # separate algorithms
-    adaptive_data = [[], []]
-    standard_data = [[], []]
-    randomised_data = [[], []]
-    possible_matches_gtm = []
+    # first algorithm data
+    runtimes_first = {}
+    runtimes_standard = {}
+    runtimes_cuda = {}
 
-
+    test_cases = [50, 2, 5, 10, 12, 22, 24, 25, 37, 51, 53, 62, 67]
+    test_cases_range = np.arange(len(test_cases))
 
     for test_case in data:
 
-        if test_case["ransac_type"] == "adaptive":
-            adaptive_data[0] += [test_case["duration"]]
-            adaptive_data[1] += [compute_correct_matches(test_case["match_id_list"])]
-            possible_matches_gtm += [test_case["match_count_gtm"]]
+        # sum runtimes per set
+        if test_case["ransac_type"] == "first":
 
+            if test_case["test_set_number"] in runtimes_first:
+                runtimes_first[test_case["test_set_number"]] += test_case["duration"]
+            else:
+                runtimes_first[test_case["test_set_number"]] = test_case["duration"]
+
+        # sum runtimes per set
         if test_case["ransac_type"] == "standard":
-            standard_data[0] += [min([test_case["duration"], 1000])]
-            standard_data[1] += [compute_correct_matches(test_case["match_id_list"])]
 
-        if test_case["ransac_type"] == "randomised":
-            randomised_data[0] += [test_case["duration"]]
-            randomised_data[1] += [compute_correct_matches(test_case["match_id_list"])]
+            if test_case["test_set_number"] in runtimes_standard:
+                runtimes_standard[test_case["test_set_number"]] += test_case["duration"]
+            else:
+                runtimes_standard[test_case["test_set_number"]] = test_case["duration"]
+
+        # sum runtimes per set
+        if test_case["ransac_type"] == "cuda":
+
+            if test_case["test_set_number"] in runtimes_cuda:
+                runtimes_cuda[test_case["test_set_number"]] += test_case["duration"]
+            else:
+                runtimes_cuda[test_case["test_set_number"]] = test_case["duration"]
+
+    runtimes_first_plottable = []
+    for key in test_cases:
+        runtimes_first[key] /= 15
+        runtimes_first_plottable.append(runtimes_first[key])
+
+    runtimes_standard_plottable = []
+    for key in test_cases:
+        runtimes_standard[key] /= 15
+        runtimes_standard_plottable.append(runtimes_standard[key])
+
+    runtimes_cuda_plottable = []
+    for key in test_cases:
+        runtimes_cuda[key] /= 15
+        runtimes_cuda_plottable.append(runtimes_cuda[key])
 
     plt.figure(1)
-    plt.stem(range(len(adaptive_data[0])), adaptive_data[0], 'r')
-    plt.stem(range(len(standard_data[0])), standard_data[0], 'b')
-    plt.stem(range(len(randomised_data[0])), randomised_data[0], 'g')
-    plt.ylabel('duration in s')
-    plt.xlabel('test case number')
+    plt.bar(test_cases_range + 0.0,  runtimes_first_plottable, color='r', width=0.25)
 
     plt.figure(2)
-    plt.plot(possible_matches_gtm, 'k-')
-    plt.plot(adaptive_data[1], 'r')
-    plt.plot(standard_data[1], 'b')
-    plt.plot(randomised_data[1], 'g')
-    plt.ylabel('correct matches')
-    plt.xlabel('test case number')
+    plt.bar(test_cases_range + 0.25,  runtimes_standard_plottable, color='g', width=0.25)
+
+    plt.figure(3)
+    plt.bar(test_cases_range + 0.5,  runtimes_cuda_plottable, color='b', width=0.25)
+    plt.ylabel('duration in s')
+    plt.xlabel('test case')
+
     plt.show()
-
-
-    print(adaptive_data)
