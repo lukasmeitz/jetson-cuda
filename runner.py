@@ -21,7 +21,7 @@ from tests.test_imaging import *
 from tests.test_gtm_handler import *
 
 
-def do_test_run(set_number, algorithm, seed, iterations=500, thresh=15, max_lines=120):
+def do_test_run(set_number, algorithm, seed, iterations=1000, thresh=15, max_lines=120):
 
     print("Doing Test #" + str(set_number) + " using " + str(algorithm) + " RANSAC")
 
@@ -54,7 +54,7 @@ def do_test_run(set_number, algorithm, seed, iterations=500, thresh=15, max_line
         return
 
     rng = np.random.default_rng(seed)
-    center = np.array([1280/2, 720/2]) if set_number >= 50 else np.array([256, 256])
+    center = np.array([1280/2, 720/2]) if set_number > 50 else np.array([256, 256])
 
     '''
     data loading
@@ -100,12 +100,10 @@ def do_test_run(set_number, algorithm, seed, iterations=500, thresh=15, max_line
         scene_lines_filtered = preprocess_length(scene_lines, max_lines)
         model_lines_filtered = preprocess_length(model_lines, max_lines)
 
-        line_pairs = preprocessor(scene_lines_filtered, model_lines_filtered)
-
         meta["duration_preprocess"] = (time.time() - start_time)
 
-        matching_correspondence, transformation_2d = ransac_standard_optimized(model_lines, scene_lines,
-                                                                               line_pairs,
+        matching_correspondence, transformation_2d = ransac_standard_optimized(model_lines_filtered,
+                                                                               scene_lines_filtered,
                                                                                rng, center,
                                                                                threshold=thresh,
                                                                                iterations=iterations)
@@ -232,7 +230,7 @@ def do_test_run(set_number, algorithm, seed, iterations=500, thresh=15, max_line
 
     # show to screen, block for user input
     if not meta["system"] == "Jetson Board":
-         plot_image(blank_image, "test set " + str(meta["test_set_number"]), False)
+         plot_image(blank_image, "test set " + str(meta["test_set_number"]), True)
 
 
 
@@ -247,19 +245,17 @@ def get_midpoint(line):
 if __name__ == "__main__":
 
     # "standard" "cuda" "first" "simple" "pairwise" "final"
-    algorithm_list = ["final"]
+    algorithm_list = ["first", "standard", "final"]
 
     #test_list = [2, 50, 5, 10, 12, 22, 24, 25, 37, 43, 51, 53, 62, 67, 69]
-    test_list = [69]
+    test_list = [2, 50, 5, 10, 12, 22, 24, 25, 37, 43, 51, 53, 62, 67, 69]
 
     for test_num in test_list:
 
         for algo in algorithm_list:
 
-            for i in range(25):
+            for i in range(15):
 
                 seed = 2004 + i
 
-                iters =200*(i+1)
-                print("doing " + str(iters) + " iterations")
-                do_test_run(test_num, algo, seed, iterations=iters)
+                do_test_run(test_num, algo, seed)

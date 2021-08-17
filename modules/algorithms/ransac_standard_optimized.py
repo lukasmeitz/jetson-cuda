@@ -9,7 +9,6 @@ import numpy as np
 
 
 def ransac_standard_optimized(model_lines, scene_lines,
-                              line_indices,
                               random_generator, center,
                               threshold=40,
                               iterations=500):
@@ -21,23 +20,20 @@ def ransac_standard_optimized(model_lines, scene_lines,
     best_transformation = []
 
     # generate samples
-    random_sample_indices = random_generator.random((iterations, 2))
-    random_sample_indices *= [len(line_indices)-1, len(line_indices)-1]
+    random_sample_indices = random_generator.random((iterations, 4))
+    random_sample_indices *= [len(model_lines)-1, len(model_lines)-1,
+                              len(scene_lines)-1, len(scene_lines)-1]
     random_sample_indices = np.round(random_sample_indices).astype(int)
 
     # loop through
     for i in range(iterations):
 
-        # resolve index
-        first_pair_index = line_indices[random_sample_indices[i][0]]
-        second_pair_index = line_indices[random_sample_indices[i][1]]
-
         # define transform
         transformation = define_transformation(
-            np.array([model_lines[int(first_pair_index[0])],
-                      model_lines[int(second_pair_index[0])]]),
-            np.array([scene_lines[int(first_pair_index[1])],
-                      scene_lines[int(second_pair_index[1])]]),
+            np.array([model_lines[random_sample_indices[i][0]],
+                      model_lines[random_sample_indices[i][1]]]),
+            np.array([scene_lines[random_sample_indices[i][2]],
+                      scene_lines[random_sample_indices[i][3]]]),
             center)
 
         # bail-out-test
