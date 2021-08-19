@@ -244,18 +244,18 @@ def get_midpoint(line):
 
 if __name__ == "__main__":
 
-    # "standard" "cuda" "first" "simple" "pairwise" "final"
-    algorithm_list = ["first", "standard", "final"]
+    # options: "standard" "cuda" "first" "simple" "pairwise" "final"
+    algorithm_list = ["final"]
 
-    #test_list = [2, 50, 5, 10, 12, 22, 24, 25, 37, 43, 51, 53, 62, 67, 69]
+    # options: 1 - 70
     test_list = [2, 50, 5, 10, 12, 22, 24, 25, 37, 43, 51, 53, 62, 67, 69]
 
     for test_num in test_list:
-
         for algo in algorithm_list:
 
-            for i in range(15):
+            # this is for measurement repeatability
+            for i in range(1):
 
-                seed = 2004 + i
-
+                # change seed for different random results
+                seed = 2000 + i
                 do_test_run(test_num, algo, seed)

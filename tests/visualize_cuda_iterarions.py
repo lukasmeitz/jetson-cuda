@@ -35,10 +35,12 @@ if __name__ == "__main__":
     5.36405873298645,
     4.585904836654663]
 
+    m, b = np.polyfit(iterations[1:], times[1:], 1)
 
     plt.figure(1)
-    plt.bar(range(len(iterations)), times)
+    plt.plot(iterations, times, 'o')
+    plt.plot(iterations, m*np.array(iterations)+b, '--k')
     plt.ylabel('Dauer in s')
-    plt.xlabel('Wiederholungen')
+    plt.xlabel('Anzahl der Wiederholungen')
 
     plt.show()

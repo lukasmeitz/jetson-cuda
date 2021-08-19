@@ -39,8 +39,8 @@ def drawing_thread(model_lines_transformed, scene_lines, img):
         if model_lines_transformed[0] is not 0:
 
             image = img[0].copy()
-            draw_current(image, scene_lines[0])
-            #draw_current(image, model_lines_transformed[0])
+            #draw_current(image, scene_lines[0])
+            draw_current(image, model_lines_transformed[0])
 
         if lock.is_set():
             break

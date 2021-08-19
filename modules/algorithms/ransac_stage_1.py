@@ -83,9 +83,10 @@ def ransac_stage_1(model_lines, scene_lines,
             current_best_transformation = t
             current_best_inliers = num_inliers
             min_error = sum(error_values)
+            time.sleep(1)
 
-            if sync.locked():
-                sync.release()
-                print(current_best_inliers)
-                #print(error_values)
-                time.sleep(0.3)
+        if sync.locked():
+            sync.release()
+            print(current_best_inliers)
+            #print(error_values)
+            time.sleep(0.01)
